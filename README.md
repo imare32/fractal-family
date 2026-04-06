@@ -18,7 +18,7 @@ The panel is located in **3D Viewport** -> **Sidebar (N)** -> **Edit** tab -> **
 - **Level**: Depth of recursion (1-20).
 - **Spline Type**: **Poly** (linear segments) or **Smooth** (Bezier splines).
 - **Initiator Curve**: (Optional) Use a custom curve object as the base shape (axiom) instead of a straight line.
-    - **Tip**: Use a regular triangle curve with **Koch Curve** preset to create a Koch Snowflake.
+    - **Tip**: Use a regular triangle curve with the **Koch Curve** preset to create a **Koch Snowflake**. Since the generation direction is determined by the spline's vertex order, it is recommended to enable the **Reverse** switch (next to the **Initiator Curve** selector) to ensure the fractal grows **outward**.
     - **Tip**: Use a regular hexagon curve with **Gosper Island** preset to create a closed Gosper Island.
 - **Show Preview**: Real-time preview to see the shape when editing the generator.
 

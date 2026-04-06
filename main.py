@@ -749,12 +749,20 @@ def create_curve_poly(points: list[Vector], name: str = "Curve", num_segments: i
     if num_segments < 1:
         num_segments = 1
 
-    for i in range(len(points) - 1):
-        p1, p2 = points[i], points[i + 1]
-        for j in range(num_segments):
-            t = j / num_segments
-            new_points.append(p1.lerp(p2, t))
-    new_points.append(points[-1])
+    if is_closed:
+        for i in range(len(points)):
+            p1 = points[i]
+            p2 = points[(i + 1) % len(points)]
+            for j in range(num_segments):
+                t = j / num_segments
+                new_points.append(p1.lerp(p2, t))
+    else:
+        for i in range(len(points) - 1):
+            p1, p2 = points[i], points[i + 1]
+            for j in range(num_segments):
+                t = j / num_segments
+                new_points.append(p1.lerp(p2, t))
+        new_points.append(points[-1])
 
     curve = bpy.data.curves.new(name=name, type="CURVE")
     spline = curve.splines.new("BEZIER")

@@ -3,7 +3,7 @@ bl_info = {
     "author": "imare32",
     "description": "Create fractal curves with ease using complex integer lattices.",
     "blender": (4, 2, 0),
-    "version": (1, 1, 5),
+    "version": (1, 1, 6),
     "location": "3D Viewport > Sidebar > Edit",
     "warning": "",
     "category": "Generic",
