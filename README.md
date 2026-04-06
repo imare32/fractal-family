@@ -11,13 +11,13 @@
 The panel is located in **3D Viewport** -> **Sidebar (N)** -> **Edit** tab -> **Fractal Family**.
 
 ### 1. Configuration & Preview
-- **Preset**: Start quickly with built-in classics like *Koch Snowflake*, *Dragon Curve*, or *Gosper Island*.
+- **Preset**: Start quickly with built-in classics like *Koch Curve*, *Dragon Curve*, or *Gosper Island*.
 - **Domain**: Choose the underlying grid structure.
     - **Gaussian (G)**: Square grid ($a + bi$).
     - **Eisenstein (E)**: Triangular/Hexagonal grid ($a + b\omega$).
 - **Level**: Depth of recursion (1-20).
 - **Spline Type**: **Poly** (linear segments) or **Smooth** (Bezier splines).
-- **Initiator Curve**: (Optional) Use a custom curve object as the base shape (axiom) instead of a straight line.
+- **Initiator Curve**: (Optional) Use a custom curve object (e.g. use a regular triangle curve with **Koch Curve** preset to create a Koch Snowflake) as the base shape (axiom) instead of a straight line.
 - **Show Preview**: Real-time preview to see the shape when editing the generator.
 
 ### 2. Designing Generators

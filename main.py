@@ -876,6 +876,7 @@ class CreateTeragonCurvesOperator(bpy.types.Operator):
                     context.view_layer.objects.active = obj
 
         elif self.mode == "LAST_LEVEL":
+            teragon_points = level_teragon_points[level]
             num_segments = 1
             name = "Teragon"
 
