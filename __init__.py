@@ -129,8 +129,11 @@ translation_dict = {
         ("*", "Each level has its own fixed colour; the HUD hint uses the same one"):
             "每一级有自己固定的颜色，HUD 的提示线用同一个色号",
         ("*", "Use the preview colour for every level"): "所有等级都用预览颜色",
-        ("*", "Polyline"): "多段线",
-        ("*", "Smooth"): "平滑",
+        # ``Poly`` / ``Bézier`` need no entry here: they are Blender's own names for the two
+        # spline types and every language pack already translates them.
+        ("*", "Straight segments between the points"): "点与点之间用直线段连接",
+        ("*", "Bézier auto handles, smooth between the points"):
+            "贝塞尔自动控制柄，点与点之间平滑过渡",
         ("*", "Up"): "上移",
         ("*", "Down"): "下移",
 

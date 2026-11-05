@@ -71,12 +71,16 @@ def _initiator_token(settings) -> str:
 
 
 def object_name(settings, keys: bool = False, levels=None) -> str:
-    """``Fractal L<range>[ Keys] <initiator> <family>[ <preset>]``.
+    """``Fractal L<range>[ Keys][ Bézier] <initiator> <family>[ <preset>]``.
 
     The family (``G(1, 1)``) is short and readable where the raw gene is not.  If the gene
     still matches an untouched preset, the preset name is appended too, so the outliner
     reads like ``Fractal L4 Line G(1, 1) Dragon Curve``; an edited gene falls back to the
     family alone.  The ``Keys`` marker keeps the shape-key object apart from the plain one.
+
+    ``Poly`` splines are the default and stay unmarked; a smooth curve carries ``Bézier``,
+    because that is the difference you cannot see in the outliner -- two objects at the same
+    level look identical by name and behave differently when you edit them.
 
     :param keys: shape-key output (the name describes its key range).
     :param levels: override the level span, e.g. ``(2, 2)`` for one object of a per-level
@@ -88,7 +92,12 @@ def object_name(settings, keys: bool = False, levels=None) -> str:
     low, high = levels
     levels_text = f"L{low}" if low == high else f"L{low}-{high}"
     mode = " Keys" if keys else ""
-    parts = [NAME_PREFIX, f"{levels_text}{mode}", _initiator_token(settings), settings.family_name()]
+    # "Bézier" is the label Blender itself uses for a BEZIER spline, and it is spelled with
+    # the accent in its own source; the name is datablock text, not interface text, so it
+    # is not translated.
+    smooth = " Bézier" if str(settings.spline_type) == "SMOOTH" else ""
+    parts = [NAME_PREFIX, f"{levels_text}{mode}{smooth}", _initiator_token(settings),
+             settings.family_name()]
     preset = settings.preset_name()
     if preset:
         parts.append(preset)

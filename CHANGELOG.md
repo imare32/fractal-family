@@ -83,6 +83,10 @@ What changed compared to **1.1.6**, the previous published release.
   under `3D Viewport > Sidebar (N) > Fractal`.
 - Settings are stored per scene (`scene.fractalfamily`) instead of on the window manager.
 - The gene list shows each segment as `A` / `B` fields plus `R` / `M` buttons.
+- **The spline switch uses Blender's own names**: `Poly` and `Bézier` instead of `Polyline`
+  and `Smooth`. Blender calls the two spline types exactly that (`Spline.type`), and every
+  language pack already translates them, so the panel no longer introduces a third pair of
+  words for the same thing two clicks away from the curve editor.
 - **Generation is defined by an optional output range** instead of three output modes.
   Without it (the default) Generate writes the **Level** you are looking at; enabling
   **Output Range** reveals `Range From` / `Range To` and writes **one object per level**.
@@ -108,8 +112,10 @@ What changed compared to **1.1.6**, the previous published release.
   per-machine point budget. **Generate Curve** writes the highest level that fits instead of
   freezing Blender (Dragon stops around level 21 on a 64 GB workstation; a nine-segment
   gene stops at level 6), and the panel says which level that is before you click.
-- `Smooth` output is budgeted separately (~6× the memory and ~8× the evaluation time per
-  point), so it degrades at a lower level than `Polyline` for the same gene.
+- `Bézier` output is budgeted separately (~6× the memory and ~8× the evaluation time per
+  point), so it degrades at a lower level than `Poly` for the same gene. A `Bézier` curve
+  also says so in its object name (`Fractal L22 Bézier Line G(1, 1)`); `Poly` is the default
+  and carries no marker.
 - **Faster curves at high levels**: Bezier coordinates, handle types and handle positions,
   polyline coordinates and shape-key coordinates are written in bulk with `foreach_set`,
   and linear subdivision is vectorised. A level-14 smooth curve dropped from ~3.9 s to
@@ -128,6 +134,14 @@ What changed compared to **1.1.6**, the previous published release.
   fall back on — are one user-facing line each. A side effect: tooltips are now translated,
   because a docstring is never looked up in the translation table. `.workbuddy/bench/
   verify_docs.py` fails the build when a new operator forgets this.
+- **Ctrl+Z no longer takes the gene with it.** Undo restores a snapshot of the scene, and
+  the gene only lands in such a snapshot when an operator writes it — the startup default
+  and a preset picked from the dropdown both write it outside one. So on a fresh file the
+  undo step behind the first Generate had an empty gene list, and undoing the curve also
+  emptied the panel into `Invalid gene`. The gene is now read from the scene in `undo_pre`,
+  kept in a module variable (the one place undo cannot reach, since it is not RNA), and put
+  back by `undo_post` — but **only** if the list came back empty, so undoing a gene edit
+  still steps back through its history.
 
 ### Removed
 

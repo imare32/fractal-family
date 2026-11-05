@@ -166,8 +166,12 @@ workstation reaches level 16 with Dragon while a small machine stops earlier. Wh
 applies, the panel says which level the keys will reach; shape-key splines are written in
 bulk, which keeps the high end of that range usable.
 
-The **Spline** switch chooses how each spline is written: *Polyline* (straight segments) or
-*Smooth* (Bezier with automatic handles).
+The **Spline** switch chooses how each spline is written: *Poly* (straight segments) or
+*Bézier* (automatic handles). These are Blender's own names for the two spline types, so the
+panel uses the words the curve editor already uses two clicks away. A Bézier curve says so
+in its object name (`Fractal L22 Bézier Line G(1, 1)`); Poly is the default and stays
+unmarked, since a name is only worth a word when it tells you what you would not otherwise
+know.
 
 **Output Range** (off by default) writes several levels at once. Its two fields appear when
 it is on; the start level defaults to 1. Each level becomes its own object unless **Join

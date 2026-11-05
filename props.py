@@ -370,10 +370,15 @@ class GenFractalFamilySettings(bpy.types.PropertyGroup):
     spline_type: bpy.props.EnumProperty(
         name="Spline",
         description="Spline type of the generated curves: polyline (straight segments) or "
-                    "smooth (Bezier with automatic handles)",
+                    "smooth (Bézier with automatic handles)",
+        # The labels are Blender's own names for the two spline types (``Spline.type``), and
+        # they already have translations in every Blender language pack: "Poly" and
+        # "Bézier" read as 多段线 / 贝塞尔 in Chinese.  Naming them anything else here -- the
+        # old "Polyline" / "Smooth" -- meant the panel used words the curve editor next door
+        # does not, and made the two incompatible-looking.
         items=[
-            ("POLY", "Polyline", "Straight segments between the points"),
-            ("SMOOTH", "Smooth", "Bezier auto handles, smooth between the points"),
+            ("POLY", "Poly", "Straight segments between the points"),
+            ("SMOOTH", "Bézier", "Bézier auto handles, smooth between the points"),
         ],
         default="POLY",
         update=_mark_dirty,
@@ -506,6 +511,7 @@ class GenFractalFamilySettings(bpy.types.PropertyGroup):
         self.active_index = max(0, min(self.active_index, len(self.items) - 1))
         self.gene = self.current_gene()
         self.dirty = True
+        _remember_gene(self)
 
     def apply_gene(self, gene: str) -> None:
         """按基因字符串写入（预设 / 导入 / 回读都走这里）。"""
@@ -834,6 +840,7 @@ class GenFractalFamilySettings(bpy.types.PropertyGroup):
         """一次编辑结束：更新基因字符串、标脏、请求重绘。"""
         self.gene = self.current_gene()
         self.dirty = True
+        _remember_gene(self)
         from . import hud
 
         hud.tag_redraw()
@@ -841,10 +848,115 @@ class GenFractalFamilySettings(bpy.types.PropertyGroup):
 
 def register():
     bpy.types.Scene.fractalfamily = bpy.props.PointerProperty(type=GenFractalFamilySettings)
+    install_undo_guard()
 
 
 def unregister():
+    remove_undo_guard()
     del bpy.types.Scene.fractalfamily
+
+
+# ---------------------------------------------------------------------------
+# 撤销不该吃掉基因
+# ---------------------------------------------------------------------------
+#
+# Undo restores a *snapshot of the scene*, and the gene is only in the snapshot if an
+# operator put it there.  Several paths write it outside any operator -- the startup timer
+# below, property callbacks (a preset picked in the dropdown), and any ``.blend`` saved with
+# a gene already in it.  So on a fresh file the undo step behind the first Generate was
+# taken with an **empty** gene list, and Ctrl+Z after generating restores "no gene": the
+# curve disappears as asked, but so does the input, and the panel reports "Invalid gene".
+#
+# A Python module variable is the one place undo cannot reach: it is not RNA, so it is not
+# in the snapshot.  The gene is read from the scene in ``undo_pre`` -- before the snapshot
+# replaces it -- kept here, and put back by ``undo_post`` if it came back empty.  Only the
+# empty case is touched: undoing an *edit* has to keep restoring the previous gene, or
+# Ctrl+Z would do nothing to the gene at all.
+#
+#: ``(domain, elements)`` of the last valid gene, or ``None``.
+_LAST_GENE = None
+
+
+def _remember_gene(settings) -> None:
+    """Cache the current gene, if it is one that can be expanded."""
+    global _LAST_GENE
+    elements = settings.elements()
+    if len(elements) < 2 or any(element.norm == 0 for element, _flags in elements):
+        return
+    if total_vector(elements).norm == 0:
+        return
+    _LAST_GENE = (settings.domain, elements)
+
+
+@bpy.app.handlers.persistent
+def remember_gene_before_undo(scene=None, *_args):
+    """Capture the gene *before* the snapshot is loaded.
+
+    Reading it here rather than at write time is the whole trick: a gene can reach the
+    scene without any Python write we could hook -- a ``.blend`` saved with one, the
+    startup file, a file opened after the add-on was already enabled.  ``undo_pre`` fires
+    while that scene is still intact, so the cache is populated no matter how the gene got
+    there.
+    """
+    if scene is None:
+        scene = getattr(bpy.context, "scene", None)
+    settings = getattr(scene, "fractalfamily", None) if scene is not None else None
+    if settings is None:
+        return
+    _remember_gene(settings)
+
+
+@bpy.app.handlers.persistent
+def restore_gene_after_undo(scene=None, *_args):
+    """Put the cached gene back when undo wiped the list (see the note above).
+
+    Registered on ``undo_post``: it runs after the snapshot is loaded, so writing here
+    lands in the restored scene rather than being overwritten by the load itself.
+    Deliberately narrow -- it acts **only** when the list came back empty, so undoing a
+    segment edit still steps back through the gene history as the user expects.
+
+    ``persistent`` because Blender drops handlers when it loads a file: without it the
+    guard would work once, then quietly disappear on the first ``File > Open``.
+    """
+    if scene is None:
+        scene = getattr(bpy.context, "scene", None)
+    settings = getattr(scene, "fractalfamily", None) if scene is not None else None
+    if settings is None or settings.items or _LAST_GENE is None:
+        return
+    domain, elements = _LAST_GENE
+    settings.set_elements(elements, domain=domain)
+
+
+@bpy.app.handlers.persistent
+def forget_cached_gene(*_args):
+    """Drop the cache when another file is opened.
+
+    The cache lives in the module, so it would otherwise survive ``File > Open`` and a
+    brand-new file -- whose own gene list is empty -- would be handed the previous file's
+    gene on the first undo.  That is not a restore, it is a leak.
+    """
+    global _LAST_GENE
+    _LAST_GENE = None
+
+
+def install_undo_guard() -> None:
+    """Attach the undo handlers (idempotent across a hot reload)."""
+    for handlers, function in (
+        (bpy.app.handlers.undo_pre, remember_gene_before_undo),
+        (bpy.app.handlers.undo_post, restore_gene_after_undo),
+        (bpy.app.handlers.load_post, forget_cached_gene),
+    ):
+        while function in handlers:
+            handlers.remove(function)
+        handlers.append(function)
+
+
+def remove_undo_guard() -> None:
+    for handlers, function in ((bpy.app.handlers.undo_pre, remember_gene_before_undo),
+                               (bpy.app.handlers.undo_post, restore_gene_after_undo),
+                               (bpy.app.handlers.load_post, forget_cached_gene)):
+        while function in handlers:
+            handlers.remove(function)
 
 
 # ---------------------------------------------------------------------------
