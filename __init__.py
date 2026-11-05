@@ -1,85 +1,317 @@
+"""Fractal Family: fractal curves from complex-integer genes, edited in a viewport HUD.
+
+A **gene** is a sequence of complex integers plus two transform flags per segment
+(reverse / mirror); it defines a substitution rule that turns a segment into a polyline.
+Repeating the substitution produces the fractal. The G domain is the square lattice
+(Gaussian integers), the E domain is the triangular lattice (Eisenstein integers).
+
+Layering (math layer never imports ``bpy``)::
+
+    lattice     -- complex integers / gene parsing / lattice snapping / level points
+    hud_layout  -- HUD primitives and hit regions (pure functions)
+    presets     -- built-in genes
+    palette     -- colour constants and sRGB -> linear helpers
+
+Blender layer (imported lazily from :func:`register`)::
+
+    props       -- ``scene.fractalfamily`` settings, design read-back on objects
+    preview     -- viewport preview, ``POST_VIEW`` immediate mode (no data-blocks)
+    hud         -- viewport HUD, ``POST_PIXEL`` panel, fonts, session state
+    curves      -- curve assembly (poly / smooth / shape-key preserving subdivision)
+    build       -- generation entry point
+    ops         -- generate / scene setup / copy-paste / HUD modal
+    ui          -- ``View3D > Sidebar > Fractal``
+"""
+
 bl_info = {
     "name": "Fractal Family",
     "author": "imare32",
     "description": "Create fractal curves with ease using complex integer lattices.",
     "blender": (4, 2, 0),
-    "version": (1, 1, 6),
-    "location": "3D Viewport > Sidebar > Edit",
+    "version": (2, 0, 0),
+    "location": "3D Viewport > Sidebar > Fractal",
     "warning": "",
     "category": "Generic",
 }
 
-import bpy
-from . import auto_load
-
+#: English msgid -> zh_HANS.  ``*`` covers RNA names/descriptions, enum items and the
+#: strings passed through :func:`i18n.t`; ``Operator`` covers ``bl_label``.
 translation_dict = {
     "zh_HANS": {
+        # --- add-on ------------------------------------------------------
         ("*", "Fractal Family"): "分形家族",
         ("*", "Create fractal curves with ease using complex integer lattices."): "使用复整数格子轻松创建分形曲线。",
-        ("*", "Complex Integer"): "复整数",
-        ("*", "Complex integer on G or E domain."): "G 域或 E 域上的复整数。",
-        ("*", "Transform Flags"): "变换标记",
-        ("*", "Reverse flag, Mirror flag"): "反转标记，镜像标记",
-        ("*", "Name"): "名称",
-        ("*", "Domain"): "域",
-        ("*", "Domain:"): "域:",
-        ("*", "Gaussian"): "高斯",
-        ("*", "Gaussian domain"): "高斯域",
-        ("*", "Eisenstein"): "艾森斯坦",
-        ("*", "Eisenstein domain"): "艾森斯坦域",
-        ("*", "Initiator Curve"): "初始曲线",
-        ("*", "Keep empty to use the segment from origin to the last accumulated coordinate."): "保持为空以使用从原点到最后累积坐标的线段。",
-        ("*", "Reverse"): "反转",
-        ("*", "Use the reversed sequence of the initiator curve points."): "使用初始曲线点的反转序列。",
+
+        # --- panel sections ----------------------------------------------
+        ("*", "Gene"): "基因",
+        ("*", "Level & Initiator"): "等级与初始折线",
+        ("*", "Generate"): "生成",
+        ("*", "Viewport Preview"): "视口预览",
+        ("*", "Status"): "状态",
+
+        # --- panel buttons / hints ---------------------------------------
+        ("*", "HUD"): "HUD",
+        ("*", "How to use the HUD"): "HUD 使用说明",
+        ("*", "Drag a node to move it on the lattice — it always snaps to integer points"):
+            "拖动节点在点阵上移动，总是吸附到整数格点",
+        ("*", "Click R / M on a segment to toggle its reverse / mirror flag"):
+            "点线段上的 R / M 切换反向 / 镜像标记",
+        ("*", "Wheel changes the level · Shift+wheel zooms · F fits the view"):
+            "滚轮改等级 · Shift+滚轮缩放 · F 重新取景",
+        ("*", "Tab or Q switches the domain · A adds a segment · X removes the last one"):
+            "Tab 或 Q 切换点阵域 · A 加一段 · X 删除最后一段",
+        ("*", "Drag the title bar to move the panel"): "拖标题栏可以移动面板",
+        ("*", "Esc, right click or × closes the HUD"): "Esc、右键或 × 关闭 HUD",
+        ("*", "Click anywhere to close this help"): "点击任意位置关闭说明",
         ("*", "Preset"): "预设",
-        ("*", "Select a preset to edit or create fractal curves"): "选择一个预设以编辑或创建分形曲线",
-        ("*", "Spline Type"): "样条类型",
-        ("*", "Spline type of the generated fractal curves"): "生成的分形曲线的样条类型",
-        ("*", "Poly"): "多段线",
+        ("*", "Copy Gene"): "复制基因",
+        ("*", "Paste Gene"): "粘贴基因",
+        ("*", "Invalid gene: at least two segments and a non-zero total vector"):
+            "基因无效：至少要两段、总向量不为零",
+        ("*", "Editing"): "编辑",
+        ("*", "Preview"): "预览",
+        ("*", "Colour Ramp"): "配色",
+        ("*", "Output Range"): "输出范围",
+        ("*", "Join Levels"): "合并为一个对象",
+        ("*", "Range From"): "起始等级",
+        ("*", "Range To"): "结束等级",
+        ("*", "Generate Curve"): "生成曲线",
+        ("*", "Generate Shape Keys"): "生成形态键",
+        ("*", "Shape Key Time"): "形态键时间",
+        ("*", "Scene Setup"): "场景预设",
+        ("*", "Preview draw failed: {error}"): "预览绘制失败：{error}",
+        ("*", "Level {level} needs about {count:,} points (limit {limit:,}); "
+              "the highest level that fits is {max}"):
+            "第 {level} 级约需 {count:,} 点（上限 {limit:,}），最高可到第 {max} 级",
+
+        # --- initiator ----------------------------------------------------
+        ("*", "Initiator"): "初始形状",
+        ("*", "Line"): "直线",
+        ("*", "Triangle"): "正三角形",
+        ("*", "Square"): "正方形",
+        ("*", "Pentagon"): "正五边形",
+        ("*", "Hexagon"): "正六边形",
+        ("*", "Octagon"): "正八边形",
+        ("*", "{sides}-gon"): "{sides} 边",
+        ("*", "Curve"): "曲线",
+        ("*", "No curve selected: currently a straight line"): "还没选曲线：当前等于直线",
+        ("*", "Custom Curve"): "自定义曲线",
+        ("*", "Initiator Curve"): "初始曲线",
+        ("*", "Reverse"): "反向",
+        ("*", "Reverse Initiator Direction"): "反向初始折线方向",
+
+        # --- properties ---------------------------------------------------
+        ("*", "Domain"): "域",
+        ("*", "Active Segment"): "当前段",
+        ("*", "Level"): "等级",
+        ("*", "Spline"): "样条",
+        ("*", "Pending"): "待生成",
+        ("*", "Points"): "点数",
+        ("*", "Generated Level"): "生成等级",
+        ("*", "Time"): "耗时",
+        ("*", "Error"): "错误",
+        ("*", "Preview Colour"): "预览颜色",
+        ("*", "First component of the complex integer (real part in G, coefficient of omega in E)"):
+            "复整数第一分量（G 域是实部，E 域是 ω 的系数）",
+        ("*", "Second component of the complex integer"): "复整数第二分量",
+        ("*", "Use the previous level backwards for this segment (R)"):
+            "这一段放入的上一级曲线首尾反向（R）",
+        ("*", "Mirror the previous level for this segment (M)"):
+            "这一段放入的上一级曲线镜面翻转（M）",
+
+        # --- enum items ---------------------------------------------------
+        ("*", "Gaussian G"): "高斯 G",
+        ("*", "Eisenstein E"): "艾森斯坦 E",
+        ("*", "Square lattice: a + bi"): "方点阵：a + bi",
+        ("*", "Triangular lattice: a + b*omega"): "三角点阵：a + bω",
+        ("*", "Level Colour"): "等级配色",
+        ("*", "Single Colour"): "单色",
+        ("*", "Each level has its own fixed colour; the HUD hint uses the same one"):
+            "每一级有自己固定的颜色，HUD 的提示线用同一个色号",
+        ("*", "Use the preview colour for every level"): "所有等级都用预览颜色",
+        ("*", "Polyline"): "多段线",
         ("*", "Smooth"): "平滑",
-        ("*", "Level of fractal curves"): "分形曲线的层级",
-        ("*", "The level of fractal curves, from 1 to 20"): "分形曲线的层级，从 1 到 20",
-        ("*", "Show Preview"): "显示预览",
-        ("*", "Show preview of the fractal curves"): "显示分形曲线的预览",
-        ("*", "Add Item"): "添加项",
-        ("Operator", "Add Item"): "添加项",
-        ("*", "Remove Item"): "移除项",
-        ("Operator", "Remove Item"): "移除项",
-        ("*", "Move Item"): "移动项",
-        ("Operator", "Move Item"): "移动项",
         ("*", "Up"): "上移",
         ("*", "Down"): "下移",
-        ("*", "Generator Items:"): "生成器项:",
-        ("*", "At least two generator items are required."): "至少需要两个生成器项。",
-        ("*", "Generator integer norm must not be zero."): "生成器整数范数不能为零。",
-        ("*", "Create Each Level"): "创建每一级",
-        ("Operator", "Create Each Level"): "创建每一级",
-        ("*", "Create Last Level"): "创建最后一级",
-        ("Operator", "Create Last Level"): "创建最后一级",
-        ("*", "Create Curve with Shape Keys"): "创建带有形态键的曲线",
-        ("Operator", "Create Curve with Shape Keys"): "创建带有形态键的曲线",
-        ("*", "Evaluation Time"): "评估时间",
-        ("*", "Create Teragon Curves"): "创建 Teragon 曲线",
-        ("Operator", "Create Teragon Curves"): "创建 Teragon 曲线",
-        ("*", "Mode"): "模式",
-        ("*", "Mode to create the Teragon Fractal Curves"): "创建 Teragon 分形曲线的模式",
-        ("*", "Create Fractal Curves for each level"): "为每一级创建分形曲线",
-        ("*", "Create Fractal Curve for the last level"): "为最后一级创建分形曲线",
-        ("*", "Create Fractal Curve with Shape Keys"): "创建带有形态键的分形曲线",
-        ("*", "Each Level"): "每一级",
-        ("*", "Last Level"): "最后一级",
-        ("*", "Shape Keys"): "形态键",
+
+        # --- status sentences --------------------------------------------
+        ("*", "Diverging: {ratio:.2f}× larger every level"): "发散：每级放大 {ratio:.2f}×",
+        ("*", "Non-contracting: the extent grows with the level"):
+            "非收缩：等级越高范围越大",
+        ("*", "Contraction {ratio:.2f} (weak, grows at high levels)"):
+            "收缩 {ratio:.2f}（偏弱，高级别会明显长大）",
+        ("*", "Contraction {ratio:.2f}"): "收缩 {ratio:.2f}",
+        ("*", "The clipboard is empty"): "剪贴板是空的",
+        ("*", "Paste failed: {error}"): "粘贴失败：{error}",
+        ("*", "Imported {family}"): "已导入：{family}",
+        ("*", "Nothing to frame: select a curve, or generate one first"):
+            "没有可取景的内容：先选一条曲线，或先生成一条",
+        ("*", "Content size is zero"): "内容尺寸为零",
+        ("*", "Generation failed: {error}"): "生成失败：{error}",
+        ("*", "Generation cancelled"): "已取消生成",
+        ("*", "Generating level {level} / {high} · {percent}%"):
+            "正在生成：第 {level} / {high} 级 · {percent}%",
+        ("*", "Points done · preparing the viewport: {count:,} points"):
+            "点已写完 · 正在准备视口：{count:,} 点",
+        ("*", "ESC cancels"): "按 ESC 可取消",
+        ("*", "a gene needs at least two segments"): "基因至少要两段",
+        ("*", "the gene has a zero-length segment (adjacent nodes coincide)"):
+            "基因里有零长度段（相邻节点重合）",
+        ("*", "invalid gene: total vector is zero (nothing to expand into)"):
+            "基因无效：总向量为零（分形无处展开）",
+        ("*", "gene is empty"): "基因是空的",
+        ("*", "Levels {low}-{high} · {splines} splines · {points} points · {ms:.0f} ms"):
+            "等级 {low}-{high} · {splines} 条样条 · {points} 点 · {ms:.0f} ms",
+        ("*", "Levels {low}-{high} · {count} objects · {points} points · {ms:.0f} ms"):
+            "等级 {low}-{high} · {count} 个对象 · {points} 点 · {ms:.0f} ms",
+        ("*", "Levels {low}-{high} · {keys} shape keys · {points} points · {ms:.0f} ms"):
+            "等级 {low}-{high} · {keys} 个形态键 · {points} 点 · {ms:.0f} ms",
+        ("*", "Orthographic top view · frame {scale:.2f} · 2048×2048 · Standard view"):
+            "正交俯视 · 取景 {scale:.2f} · 2048×2048 · Standard 色彩变换",
+
+        # --- HUD (drawn with blf, translated via i18n.t) ------------------
+        ("*", "Fractal Gene"): "分形基因",
+        ("*", "+ Seg"): "加段",
+        ("*", "- Seg"): "删段",
+        ("*", "Fit"): "适应",
+        ("*", "Drag · R/M flags · wheel level · Tab/Esc on panel"):
+            "拖节点 · R/M 切标记 · 滚轮换层 · Tab/Esc",
+
+        # --- operator labels ---------------------------------------------
+        ("Operator", "Generate Fractal Curves"): "生成分形曲线",
+        ("Operator", "Scene Setup"): "场景预设",
+        ("Operator", "Add Segment"): "添加一段",
+        ("Operator", "Remove Segment"): "删除这一段",
+        ("Operator", "Move Segment"): "移动这一段",
+        ("Operator", "Copy Gene"): "复制基因",
+        ("Operator", "Paste Gene"): "粘贴基因",
+        ("Operator", "Switch Lattice Domain"): "切换点阵域",
+        ("Operator", "HUD Gene Editor"): "HUD 编辑基因",
+        ("Operator", "Dismiss"): "知道了",
+
+        # --- operator tooltips -------------------------------------------
+        # Context-less, unlike the labels above: Blender's own catalogue keeps operator
+        # *names* in the "Operator" context and every *tooltip* in the default one, so a
+        # ``bl_description`` has to be registered under ``"*"`` to be found.
+        ("*", "Build the curve for the current gene. A level too heavy for this "
+              "machine is written at the highest level that fits, and the panel "
+              "says which one was used"):
+            "生成当前基因的曲线。本机吃不下的等级会按能容纳的最高等级生成，面板会说明实际用了哪一级",
+        ("*", "Hide this notice"): "隐藏这条提示",
+        ("*", "Frame the selected curve with an orthographic top-view camera, "
+              "a 2048×2048 render and the Standard view transform"):
+            "用正交俯视摄像机、2048×2048 分辨率与 Standard 色彩变换框住选中的曲线",
+        ("*", "Add a segment at the end, starting in the direction of the last one"):
+            "在末尾加一段，方向沿用最后一段",
+        ("*", "Remove the selected segment. A gene needs at least two"):
+            "删除选中的这一段。基因至少需要两段",
+        ("*", "Move the selected segment one place up or down"):
+            "把选中的这一段上移或下移一位",
+        ("*", "Switch between the Gaussian (square) and Eisenstein (triangular) "
+              "lattice: the same two integers point in different directions"):
+            "在高斯（正方）与艾森斯坦（三角）点阵之间切换：同一对整数在两个点阵里指向不同方向",
+        ("*", 'Copy this gene as text, for example "G 1 0 0 0 0 1 1 0"'):
+            "把当前基因复制为文本，例如「G 1 0 0 0 0 1 1 0」",
+        ("*", "Read a gene from the clipboard and make it the current gene"):
+            "从剪贴板读取基因，并设为当前基因",
+        ("*", "Open the in-viewport gene editor: drag nodes, click R/M to toggle "
+              "flags, wheel to change the level. Esc or × closes it, and the rest "
+              "of the viewport keeps working as usual"):
+            "在 3D 视口里打开基因编辑器：拖动节点、点 R/M 切换标记、滚轮换层。"
+            "按 Esc 或点 × 关闭，视口其余部分照常可用",
+
+        # --- 本机预算 / 退化提示 ------------------------------------------
+        ("*", "{count:,} points · {seconds} · {size}"):
+            "{count:,} 点 · {seconds} · {size}",
+        ("*", "Level {level} · {cost}"): "第 {level} 级 · {cost}",
+        ("*", "Available memory {size} · up to {limit:,} points"):
+            "可用内存 {size} · 上限 {limit:,} 点",
+        ("*", "Available memory {size} · speed {speed:.2f}× reference · up to "
+              "{limit:,} points"):
+            "可用内存 {size} · 速度 {speed:.2f}× 参考机 · 上限 {limit:,} 点",
+        ("*", "Speed calibration runs on the first Generate"): "首次生成时会测一次本机速度",
+        ("*", "Not enough memory for this level"): "该等级内存不足",
+        ("*", "Not enough memory for level {level}: it needs about {size} and {avail} is "
+              "available. The viewport preview shows it instead"):
+            "第 {level} 级内存不足：约需 {size}，当前可用 {avail}。已改用视口预览显示",
+        ("*", "Generated level {actual} instead of {requested} (budget for this machine)"):
+            "已生成第 {actual} 级（请求第 {requested} 级，受本机预算限制）",
+
+        # --- 面板文案（2026-11-05 精简后新写的短句）--------------------------
+        ("*", "Changed"): "已修改",
+        ("*", "Up to date"): "已生成",
+        ("*", "Keep"): "保留",
+        ("*", "Performance warning"): "性能警告",
+        ("*", "Writes level {limit}, not {level}"): "将写入第 {limit} 级，不是第 {level} 级",
+        ("*", "Shape keys ≤ level {limit}"): "形态键 ≤ 第 {limit} 级",
+        ("*", "Preview stops at level {limit}"): "预览止于第 {limit} 级",
+        ("*", "Wrote level {actual}, not {requested}"): "已写入第 {actual} 级（请求第 {requested} 级）",
+        ("*", "Wrote level {actual} over the budget"): "已按第 {actual} 级写入（超出预算）",
+        ("*", "Level {level} anyway"): "仍然生成第 {level} 级",
+        ("*", "Last: L{levels} · {points:,} points · {ms:.0f} ms"):
+            "上次：第 {levels} 级 · {points:,} 点 · {ms:.0f} 毫秒",
+        ("*", "{size} free · up to {limit:,} points"):
+            "{size} 可用 · 上限 {limit:,} 点",
     }
 }
 
-auto_load.init()
+
+def _classes():
+    """RNA classes to register, in dependency order (property groups first)."""
+    from . import budget, ops, props, ui
+
+    return (
+        # Preferences first: the panel's budget dropdown is a proxy onto it, so the
+        # property has to exist before anything reads it.
+        budget.FRACTALFAMILY_AP_preferences,
+        props.GeneratorItem,
+        props.GenFractalFamilySettings,
+        ui.FRACTALFAMILY_UL_items,
+        ops.FRACTALFAMILY_OT_generate,
+        ops.FRACTALFAMILY_OT_setup_scene,
+        ops.FRACTALFAMILY_OT_item_add,
+        ops.FRACTALFAMILY_OT_item_remove,
+        ops.FRACTALFAMILY_OT_item_move,
+        ops.FRACTALFAMILY_OT_copy_gene,
+        ops.FRACTALFAMILY_OT_paste_gene,
+        ops.FRACTALFAMILY_OT_set_domain,
+        ops.FRACTALFAMILY_OT_hud,
+        ops.FRACTALFAMILY_OT_clear_notice,
+        ui.FRACTALFAMILY_PT_panel,
+    )
 
 
 def register():
-    auto_load.register()
+    import bpy
+
+    from . import hud, preview, props
+
+    for cls in _classes():
+        bpy.utils.register_class(cls)
+    # The pointer must be attached after GenFractalFamilySettings is registered.
+    props.register()
+    # Two draw handlers: 3D preview (POST_VIEW) and HUD (POST_PIXEL).
+    preview.install()
+    hud.install()
+    # Fill a default gene on first enable (needs a usable scene context).
+    props.install_bootstrap()
     bpy.app.translations.register(__name__, translation_dict)
 
 
 def unregister():
+    import bpy
+
+    from . import hud, preview, props
+
+    # Remove handlers / timers first: they touch RNA classes and would be left dangling
+    # once the classes are unregistered.
+    props.remove_bootstrap()
+    hud.remove()
+    preview.remove()
+    props.unregister()
+    for cls in reversed(_classes()):
+        try:
+            bpy.utils.unregister_class(cls)
+        except RuntimeError:
+            pass
     bpy.app.translations.unregister(__name__)
-    auto_load.unregister()

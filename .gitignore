@@ -1,0 +1,22 @@
+# Python bytecode
+__pycache__/
+*.py[cod]
+
+# Extension builds
+*.zip
+/dist/
+
+# Blender backups
+*.blend1
+*.blend2
+
+# Editors / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Local work area: verification scripts, design notes and notes taken while developing.
+# It is not part of the add-on and is already excluded from extension builds
+# (see paths_exclude_pattern in blender_manifest.toml).
+.workbuddy/

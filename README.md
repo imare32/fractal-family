@@ -2,38 +2,262 @@
 
 [![Blender Extensions](https://img.shields.io/badge/Extensions-Fractal_Family-blue?logo=blender)](https://extensions.blender.org/add-ons/fractal-family/) ![Blender Version](https://img.shields.io/badge/Blender-4.2%2B-orange) ![License](https://img.shields.io/badge/License-GPL-green)
 
-**Fractal Family** is a Blender extension that allows you to easily create fractal curves using complex integer lattices. Based on [Jeffrey Ventrella's research](http://www.fractalcurves.com/familytree/), it enables the exploration of the "family tree" of fractal curves through recursive substitution on Gaussian (square) or Eisenstein (triangular) grids.
+English · [简体中文](README.zh-CN.md)
 
-## Usage Guide
+Fractal Family generates fractal curves from a short list of complex integers. It is based
+on [Jeffrey Ventrella's research](http://www.fractalcurves.com/familytree/): every curve in
+the "family tree" is described by a small **gene**, and the fractal is what that gene grows
+into when its substitution rule is applied over and over.
 
-> **Tip**: Use **Top View** (Numpad 7) when using this add-on for better experience.
+The panel lives in **3D Viewport → Sidebar (`N`) → Fractal**.
 
-The panel is located in **3D Viewport** -> **Sidebar (N)** -> **Edit** tab -> **Fractal Family**.
+## What it does
 
-### 1. Configuration & Preview
-- **Preset**: Start quickly with built-in classics like *Koch Curve*, *Dragon Curve*, or *Gosper Island*.
-- **Domain**: Choose the underlying grid structure.
-    - **Gaussian (G)**: Square grid ($a + bi$).
-    - **Eisenstein (E)**: Triangular/Hexagonal grid ($a + b\omega$).
-- **Level**: Depth of recursion (1-20).
-- **Spline Type**: **Poly** (linear segments) or **Smooth** (Bezier splines).
-- **Initiator Curve**: (Optional) Use a custom curve object as the base shape (axiom) instead of a straight line.
-    - **Tip**: Use a regular triangle curve with the **Koch Curve** preset to create a **Koch Snowflake**. Since the generation direction is determined by the spline's vertex order, it is recommended to enable the **Reverse** switch (next to the **Initiator Curve** selector) to ensure the fractal grows **outward**.
-    - **Tip**: Use a regular hexagon curve with **Gosper Island** preset to create a closed Gosper Island.
-- **Show Preview**: Real-time preview to see the shape when editing the generator.
+A **gene** is a sequence of complex integers plus two transform flags per segment. Each
+segment says where the next copy of the curve goes; the flags say whether that copy is
+reversed or mirrored. Applying the substitution to a straight line once gives level 1;
+applying it to *that* result gives level 2, and so on. The result is a **teragon** — the
+polyline that passes through every level.
 
-### 2. Designing Generators
-Customize the fractal's "DNA" by editing the generator items. The generator is a sequence of Complex Integers along with a pair of Transform Flags.
-- **A / B**: Coordinates of the complex integer.
-- **Transform Flags**:
-    - **R (Reverse)**: Reverses the pattern for this segment.
-    - **M (Mirror)**: Mirrors the pattern for this segment.
+Two lattices are supported:
 
-### 3. Generation Modes
-- **Create Last Level**: Generates the final curve at the specified level.
-- **Create Each Level**: Generates separate objects for every level from 0 to N.
-- **Create Curve with Shape Keys**: Creates a single object capable of morphing.
-    - The addon automatically configures the **Shape Keys** (disables *Relative* mode). You can simply animate the **Evaluation Time** property that appears below the button to grow the fractal.
+- **Gaussian (`G`)** — square lattice, complex integers `a + bi`.
+- **Eisenstein (`E`)** — triangular lattice, `a + bω`; three-way junctions, hexagonal
+  structures and Gosper-style curves come from here.
 
-## ⚠️ Limitations
-- Supports **Edge Replacement** fractals on complex integer lattices X-Y plane. Does not support L-Systems or **Node Replacement** fractals (e.g. standard Hilbert Curve) directly.
+The gene's total vector (shown as **family**, e.g. `G(1, 1)`) describes where the whole
+curve ends up, and different genes with the same total vector share a visual family.
+
+Everything you can generate is one of two things:
+
+1. **A curve** with one spline per level — good for rendering, extruding, converting to
+   mesh, or using as a path. With **Output Range** off (the default) you get a single
+   spline at the current level; with it on you get one object per level, or one object with
+   one spline per level if you tick **Join Levels**.
+2. **Shape keys** — one object whose base shape is the initiator and which carries one
+   shape key per level, so animating **Evaluation Time** grows the fractal. This is the
+   headline feature: a whole fractal growth animation as a single curve object.
+
+While you design a gene you never have to generate anything: the **viewport preview** draws
+the current level with immediate-mode rendering, so edits show up as you type or drag.
+
+## Installation
+
+Install **Fractal Family** from the Blender Extensions platform (Edit → Preferences →
+Get Extensions), or use *Install from Disk* with a `.zip` built from this repository.
+Requires Blender **4.2 LTS** or newer.
+
+## User guide
+
+### Quick start
+
+1. Open the `Fractal` tab in the 3D viewport sidebar.
+2. Pick a **Preset** — the dropdown groups them by family, e.g. `E(3, 2) Gosper Island`.
+3. Set the **Level** (default 4) and press **Generate Curve**, or press **Generate Shape
+   Keys** to get the morphing version.
+
+Work in **Top View** (`Numpad 7`): the curves are generated on the XY plane.
+
+### The gene
+
+- **A / B** — the complex integer of a segment (real and imaginary part in `G`; in `E`, the
+  coefficients of `1` and `ω`).
+- **R (Reverse)** — traverse the previous level backwards for this segment.
+- **M (Mirror)** — mirror the previous level for this segment.
+- The list is ordered: the curve visits the segments in the order shown, starting at the
+  origin. Dragging rows up/down reorders them.
+- **Copy Gene / Paste Gene** exchange the gene as a plain string such as
+  `G 1 0 0 0 0 1 1 0`. Pasting a malformed gene leaves the current one untouched.
+- At least two segments are required, none may be zero-length, and the total vector must
+  not be zero — otherwise the panel shows what is wrong instead of generating.
+
+The **family** label under the list (`G(2, 1)`, `E(1, 0)`…) is the total vector of the
+gene: it tells you where the curve ends and which family of curves you are in.
+
+### Level and preview
+
+**Level** is what you are editing and looking at; the HUD wheel changes this one. Level 0
+is the initiator, level 1 is the gene itself, and every level above replaces each segment
+with the whole previous level.
+
+The **viewport preview** draws that level in the viewport while you edit. It needs no
+Generate and creates no objects. Its depth is limited by a point budget rather than a fixed
+number, so simple genes go deep and dense ones stop earlier: a two-segment gene such as
+Dragon Curve previews up to level 16, a five-segment gene around level 7, a nine-segment
+gene around level 5. When the preview has to stop below the requested level, the panel says
+so.
+
+**Preview** (top of the panel) switches the drawing on and off; it is off by default.
+**Colour Ramp** chooses between one fixed colour per level and a single colour of your
+choice.
+
+### Initiator
+
+The level-0 shape is what the first substitution is applied to:
+
+- **Line** (default) — from the origin to the total vector.
+- **3-gon … 8-gon** — closed regular polygons, with the side length derived from the total
+  vector, so closed fractals such as the Koch snowflake or a closed Gosper island need no
+  hand-built curve.
+- **Custom Curve** — any curve object's first spline (the object transform is ignored).
+
+**Reverse Initiator Direction** reads the initiator backwards. For a line that means the
+fractal grows from the total vector back to the origin (the same shape turned half a turn);
+for polygons and custom curves it flips the direction the curve grows in, which is how you
+get "inward" variants of a snowflake.
+
+### Output: curve or shape keys
+
+**Generate Curve** writes the current level (or the output range) as a curve with one
+spline per level. The point count grows exponentially with the level (`segments × gene
+segments ^ level`), so Generate works inside a **budget derived from this machine**: the
+memory that is actually available, and a speed calibration measured once and kept in the
+preferences. That comes out around 1.7 million points on a busy 8 GB laptop and 5–6 million
+on a workstation. The panel shows both the limit and what the level you are about to
+generate costs (`Level 6 · 1 000 001 points · about 0.15 s · about 260 MB`), before you
+press anything.
+
+Anything predicted to take longer than a third of a second runs **in steps**, and the
+progress bar appears **where the Generate buttons were** — the same box, so the feedback is
+where you just clicked rather than in a status line at the other end of the window. It reads
+`Generating level 12 / 22 · 55 %`, with `ESC cancels` underneath, and `ESC` stops the build
+and removes whatever had been written. Once the points are written the bar **goes away** and
+a line of text takes over (`Points done · preparing the viewport: 4,194,305 points`):
+Blender's own evaluation is a single uninterruptible step — an atomic C call during which
+the window cannot even redraw — so there is no honest fraction to show for it, and a bar
+parked at 100 % would read as "finished, why is nothing happening". A statement of fact
+cannot be wrong; a fake percentage can. The curve is filled level by level as it is expanded,
+so the peak is the current level plus the curve instead of the whole ladder — about half of
+what it used to be, which is why the same budget now builds further. The last part of the
+wait is Blender's own: once Generate returns, the dependency graph evaluates the new curve,
+and that cannot be interrupted from Python.
+
+Generate writes the curve you asked for and nothing else: it never hides, converts or moves
+the result. A heavy curve is simply a heavy curve — orbit it, render it, or hide it yourself
+with Blender's own tools.
+
+The budget is **derived, not chosen**, and it answers exactly two questions: is there
+enough free memory (a quarter of it, less a reserve), and is the wait still reasonable (ten
+seconds including evaluation). Those are the only reasons a level ever gets reduced. Ten
+seconds is generous on purpose — if you typed a big level you asked to wait, and past 0.35 s
+the build is already a modal job with a progress line and `ESC`, so it is a visible wait
+rather than a hang. There is no separate point ceiling: a machine that is fast enough and has
+the memory is entitled to build the level you asked for. There is no budget setting anywhere — the Status
+section prints the number it ended up with (`45.5 GB free · up to 6,622,516 points`), which
+is also the reason a level gets reduced. The level field goes up to 24 for everybody;
+Generate writes the highest level that fits under that point count, and says so.
+
+Asking for more is not an error: Generate writes the highest level that fits and says so
+(`Wrote level 20, not 24`). The object is named after what it actually holds, and keeps the
+original request in its `fractalfamily_requested_level` property. If you do want the full
+thing, **Level 24 anyway** next to that message does it in one click — the button only exists
+inside the notice, so a second confirmation dialog would add nothing, and it is the one path
+that can freeze Blender.
+
+**Generate Shape Keys** writes one object that morphs: the base shape is the initiator,
+every level from 1 to the last becomes a key, and animating **Shape Key Time** (Evaluation
+Time) grows the fractal from a straight line into the curve. Levels are subdivided so all
+keys share the same vertex count. Shape keys always cover all levels, whatever the output
+range is.
+
+Shape keys are budgeted separately, because each key is a full copy of the curve (cost ≈
+levels × points): the budget counts **total key points**, not points per key, so a
+workstation reaches level 16 with Dragon while a small machine stops earlier. When the cap
+applies, the panel says which level the keys will reach; shape-key splines are written in
+bulk, which keeps the high end of that range usable.
+
+The **Spline** switch chooses how each spline is written: *Polyline* (straight segments) or
+*Smooth* (Bezier with automatic handles).
+
+**Output Range** (off by default) writes several levels at once. Its two fields appear when
+it is on; the start level defaults to 1. Each level becomes its own object unless **Join
+Levels** is ticked, in which case the whole range goes into one object with one spline per
+level, lowest first.
+
+Every press of Generate adds a new object. If the name is already taken Blender appends
+`.001`, and nothing that already exists is modified, so materials, modifiers or animation
+you applied earlier survive.
+
+### Editing in the viewport (HUD)
+
+Press **HUD** at the top of the panel to edit the gene directly in the viewport; the button
+stays highlighted while the panel is open, and pressing it again closes the panel.
+The panel opens in the bottom-left corner — **above Blender's own *Adjust Last Operation*
+panel**, so neither covers the other — and can be dragged anywhere from its title bar.
+The `?` button in its title bar opens a help card with the same controls:
+
+| Action | Result |
+| --- | --- |
+| Drag a node | Move it to another lattice point (always snapped) |
+| Click `R` / `M` on a segment | Toggle that segment's reverse / mirror flag |
+| `Wheel` | Change the level |
+| `Shift` + `Wheel` | Zoom the HUD lattice |
+| `Tab` or `Q` | Switch Gaussian / Eisenstein domain |
+| `A` | Append a segment |
+| `X` or `Delete` | Remove the last segment |
+| `F` | Fit the view |
+| `Esc`, right click, or `×` | Close the HUD |
+| Drag the title bar | Move the panel |
+
+The HUD never takes over the viewport: it only captures keys and clicks while the pointer
+is over the panel, so selection, navigation and shortcuts keep working everywhere else.
+
+### Scene setup
+
+**Scene Setup** frames the **selected** curve with an orthographic top-view camera, sets a
+2048×2048 render and the Standard view transform so the curve renders in the colours shown
+in the viewport. With nothing selected it falls back to the current preview.
+
+### Object naming
+
+Generated objects are named from the level range, the initiator and the gene's family; an
+untouched preset also gets its name appended:
+
+```
+Fractal L4 Line G(1, 1) Dragon Curve
+Fractal L2-4 6gon-rev E(2, 1)
+Fractal L1-5 Keys Line G(1, 1) Koch Curve
+```
+
+The name is a label, not a fingerprint: two different genes in the same family, with the
+same range and initiator, produce the same name (the newer one gets `.001`).
+
+## Localisation
+
+The panel and the HUD follow Blender's interface language (Simplified Chinese is included).
+The HUD falls back to English labels if the CJK font bundled with Blender is unavailable.
+
+## Permissions
+
+One permission is declared: **clipboard**, used by *Paste Gene*. Nothing is written to the
+clipboard unless you press *Copy Gene*.
+
+No `files` permission is declared, because the add-on performs no filesystem access at all —
+it generates geometry and stops there. Turning points into a file is Blender's job or your
+own; there are plenty of exporters for that.
+
+The add-on also asks the operating system how much memory is free, to size the generation
+budget (see *Output* above). That number is used locally and is never sent anywhere; no
+network access is involved.
+
+The measured speed factor is an ordinary add-on **preference**, which Blender stores in
+its own preference file — that is why it survives a restart without the add-on touching the
+disk, and why nothing is left behind when it is uninstalled. It is the only thing the
+add-on stores: the budget has no setting to store. (The
+initiator curve you pick with *Custom Curve* is read through Blender's data API, not from
+disk.)
+
+## Limitations
+
+- Edge-replacement fractals on complex-integer lattices on the XY plane only. Node
+  replacement (e.g. the standard Hilbert curve) and L-systems are not supported.
+- The preview is drawn in the viewport and does not appear in renders; renders use the
+  generated curve objects.
+- macOS/Metal ignores line widths above 1 px. The HUD draws its polyline as geometry
+  instead of GL lines; in the 3D preview the level colour is the reliable cue.
+- Custom initiators read the first spline only and ignore the object transform.
+- Very high levels produce very many points; the panel warns but does not stop you.
+
+## Changelog
+
+See [CHANGELOG.md](CHANGELOG.md). License: GPL-3.0-or-later.

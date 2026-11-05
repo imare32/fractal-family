@@ -1,4 +1,18 @@
-default_curvedefs = [
+"""内置基因预设：从 Jeff Ventrella 的 fractal curves 家族树整理而来。
+
+每个预设是一条基因字符串 + 家族名（域 + 总向量）。``family`` 只用来在面板与 HUD 上
+分组显示；真正参与生成的是 ``gene``。
+
+数据与参考实现（fractal-family 1.1.6 的 ``default_presets.py``）逐条一致 —— 改名字无所谓，
+改坐标就等于换了一个分形；动这张表之前先用 ``lattice.parse_gene`` 对拍一遍点数。
+"""
+
+from __future__ import annotations
+
+__all__ = ["DEFAULT_GENES", "GENES_BY_NAME", "preset_names"]
+
+#: ``[{name, gene, family}, ...]``，顺序即面板里的顺序。
+DEFAULT_GENES = [
     {"name": "Dragon Curve", "gene": "G 1 0 0 0 0 1 1 0", "family": "G(1, 1)"},
     {"name": "Polya Curve", "gene": "G 1 1 1 0 1 -1 1 0", "family": "G(2, 0)"},
     {"name": "Terdragon", "gene": "E 1 1 0 0 0 -1 0 0 1 1 0 0", "family": "E(2, 1)"},
@@ -96,3 +110,11 @@ default_curvedefs = [
     {"name": "Ugly-10", "gene": "G 1 0 0 0 0 1 1 0 1 0 0 0 0 -1 1 0 -1 0 0 0 0 -1 1 0 1 0 0 0 0 1 1 0 1 0 0 0 0 1 1 0", "family": "G(3, 1)"},
     {"name": "Gosper Island", "gene": "E 1 1 0 0 1 0 0 0 1 1 0 0", "family": "E(3, 2)"},
 ]
+
+#: 名字 → 预设（HUD 与面板的预设枚举都按名字查）。
+GENES_BY_NAME = {item["name"]: item for item in DEFAULT_GENES}
+
+
+def preset_names() -> list[str]:
+    """预设名列表（顺序即面板顺序）。"""
+    return [item["name"] for item in DEFAULT_GENES]
