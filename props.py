@@ -283,7 +283,7 @@ class GenFractalFamilySettings(bpy.types.PropertyGroup):
 
     gene: bpy.props.StringProperty(
         name="Gene",
-        description="Current gene as a string (read-only display; use Paste Gene to import)",
+        description="Current gene as a string (read-only display)",
         default="",
     )
 

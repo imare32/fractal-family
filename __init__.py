@@ -67,8 +67,6 @@ translation_dict = {
         ("*", "Esc, right click or × closes the HUD"): "Esc、右键或 × 关闭 HUD",
         ("*", "Click anywhere to close this help"): "点击任意位置关闭说明",
         ("*", "Preset"): "预设",
-        ("*", "Copy Gene"): "复制基因",
-        ("*", "Paste Gene"): "粘贴基因",
         ("*", "Invalid gene: at least two segments and a non-zero total vector"):
             "基因无效：至少要两段、总向量不为零",
 
@@ -225,9 +223,6 @@ translation_dict = {
         ("*", "Contraction {ratio:.2f} (weak, grows at high levels)"):
             "收缩 {ratio:.2f}（偏弱，高级别会明显长大）",
         ("*", "Contraction {ratio:.2f}"): "收缩 {ratio:.2f}",
-        ("*", "The clipboard is empty"): "剪贴板是空的",
-        ("*", "Paste failed: {error}"): "粘贴失败：{error}",
-        ("*", "Imported {family}"): "已导入：{family}",
         ("*", "Nothing to frame: select a curve, or generate one first"):
             "没有可取景的内容：先选一条曲线，或先生成一条",
         ("*", "Content size is zero"): "内容尺寸为零",
@@ -268,8 +263,6 @@ translation_dict = {
         ("Operator", "Add Segment"): "添加一段",
         ("Operator", "Remove Segment"): "删除这一段",
         ("Operator", "Move Segment"): "移动这一段",
-        ("Operator", "Copy Gene"): "复制基因",
-        ("Operator", "Paste Gene"): "粘贴基因",
         ("Operator", "Switch Lattice Domain"): "切换点阵域",
         ("Operator", "HUD Gene Editor"): "HUD 编辑基因",
         ("Operator", "Dismiss"): "知道了",
@@ -302,10 +295,6 @@ translation_dict = {
         ("*", "Switch between the Gaussian (square) and Eisenstein (triangular) "
               "lattice: the same two integers point in different directions"):
             "在高斯（正方）与艾森斯坦（三角）点阵之间切换：同一对整数在两个点阵里指向不同方向",
-        ("*", 'Copy this gene as text, for example "G 1 0 0 0 0 1 1 0"'):
-            "把当前基因复制为文本，例如「G 1 0 0 0 0 1 1 0」",
-        ("*", "Read a gene from the clipboard and make it the current gene"):
-            "从剪贴板读取基因，并设为当前基因",
         ("*", "Open the in-viewport gene editor: drag nodes, click R/M to toggle "
               "flags, wheel to change the level. Esc or × closes it, and the rest "
               "of the viewport keeps working as usual"):
@@ -391,8 +380,6 @@ def _classes():
         ops.FRACTALFAMILY_OT_item_add,
         ops.FRACTALFAMILY_OT_item_remove,
         ops.FRACTALFAMILY_OT_item_move,
-        ops.FRACTALFAMILY_OT_copy_gene,
-        ops.FRACTALFAMILY_OT_paste_gene,
         ops.FRACTALFAMILY_OT_set_domain,
         ops.FRACTALFAMILY_OT_hud,
         ops.FRACTALFAMILY_OT_clear_notice,

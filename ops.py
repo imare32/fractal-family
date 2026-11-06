@@ -30,13 +30,11 @@ from .props import LEVEL_MAX, LEVEL_MIN
 __all__ = [
     "FRACTALFAMILY_OT_clear_notice",
     "FRACTALFAMILY_OT_clear_request",
-    "FRACTALFAMILY_OT_copy_gene",
     "FRACTALFAMILY_OT_generate",
     "FRACTALFAMILY_OT_hud",
     "FRACTALFAMILY_OT_item_add",
     "FRACTALFAMILY_OT_item_move",
     "FRACTALFAMILY_OT_item_remove",
-    "FRACTALFAMILY_OT_paste_gene",
     "FRACTALFAMILY_OT_request_generate",
     "FRACTALFAMILY_OT_set_domain",
     "FRACTALFAMILY_OT_setup_scene",
@@ -807,50 +805,6 @@ class FRACTALFAMILY_OT_set_domain(bpy.types.Operator):
             settings.domain = self.domain
         hud.reset_view()
         hud.tag_redraw()
-        return {"FINISHED"}
-
-
-# ---------------------------------------------------------------------------
-# 基因复制 / 粘贴
-# ---------------------------------------------------------------------------
-
-
-class FRACTALFAMILY_OT_copy_gene(bpy.types.Operator):
-    """Put the gene string on the clipboard (the format Paste Gene reads)."""
-
-    bl_idname = "fractalfamily.copy_gene"
-    bl_label = "Copy Gene"
-    bl_description = 'Copy this gene as text, for example "G 1 0 0 0 0 1 1 0"'
-
-    def execute(self, context):
-        settings = _settings(context)
-        context.window_manager.clipboard = settings.current_gene()
-        self.report({"INFO"}, settings.current_gene())
-        return {"FINISHED"}
-
-
-class FRACTALFAMILY_OT_paste_gene(bpy.types.Operator):
-    """Parse the clipboard into a gene, then apply it."""
-
-    bl_idname = "fractalfamily.paste_gene"
-    bl_label = "Paste Gene"
-    bl_description = "Read a gene from the clipboard and make it the current gene"
-
-    def execute(self, context):
-        settings = _settings(context)
-        text = (context.window_manager.clipboard or "").strip()
-        if not text:
-            self.report({"WARNING"}, t("The clipboard is empty"))
-            return {"CANCELLED"}
-        try:
-            settings.apply_gene(text)
-        except (ValueError, IndexError) as exc:
-            settings.error = tfmt("Paste failed: {error}", error=exc)
-            self.report({"ERROR"}, settings.error)
-            return {"CANCELLED"}
-        settings.error = ""
-        hud.tag_redraw()
-        self.report({"INFO"}, tfmt("Imported {family}", family=settings.family_name()))
         return {"FINISHED"}
 
 

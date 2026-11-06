@@ -17,14 +17,17 @@ blender_version_min = "4.2.0"
 
 license = ["SPDX:GPL-3.0-or-later"]
 
-# "Paste Gene" reads a gene string (e.g. "G 1 0 0 0 0 1 1 0") from the clipboard.
+# No permissions are requested.
 #
-# No "files" permission, because the add-on performs no filesystem access at all: the
+# Copy / Paste Gene would need ``clipboard``, and it is not part of 2.0.0: 1.1.6 asked for
+# nothing, and an update that *adds* a permission changes what the listing promises, which
+# is exactly the kind of change that can hold a release up.  The feature is planned for a
+# follow-up version, on its own, where a review queue delay costs nobody anything.  The code
+# is in the git history (see ``FRACTALFAMILY_OT_copy_gene`` in the 2.0.0 commit).
+#
+# No "files" permission either: the add-on performs no filesystem access at all.  The
 # measured speed factor is an ordinary add-on preference, which Blender stores in its own
-# preference file.  Nothing is cached to disk, so there is nothing to clean up on uninstall
-# either.
-[permissions]
-clipboard = "Paste gene strings copied from another file or the documentation"
+# preference file.  Nothing is cached to disk, so there is nothing to clean up on uninstall.
 
 [build]
 paths_exclude_pattern = [

@@ -17,13 +17,11 @@ from .i18n import t, tfmt
 from .ops import (
     FRACTALFAMILY_OT_clear_notice,
     FRACTALFAMILY_OT_clear_request,
-    FRACTALFAMILY_OT_copy_gene,
     FRACTALFAMILY_OT_generate,
     FRACTALFAMILY_OT_hud,
     FRACTALFAMILY_OT_item_add,
     FRACTALFAMILY_OT_item_move,
     FRACTALFAMILY_OT_item_remove,
-    FRACTALFAMILY_OT_paste_gene,
     FRACTALFAMILY_OT_request_generate,
     FRACTALFAMILY_OT_set_domain,
     FRACTALFAMILY_OT_setup_scene,
@@ -285,9 +283,8 @@ def _gene(layout, settings):
     column.operator(FRACTALFAMILY_OT_item_move.bl_idname, icon="TRIA_UP", text="").direction = "UP"
     column.operator(FRACTALFAMILY_OT_item_move.bl_idname, icon="TRIA_DOWN", text="").direction = "DOWN"
 
-    row = box.row(align=True)
-    row.operator(FRACTALFAMILY_OT_copy_gene.bl_idname, icon="COPYDOWN", text=t("Copy Gene"))
-    row.operator(FRACTALFAMILY_OT_paste_gene.bl_idname, icon="PASTEDOWN", text=t("Paste Gene"))
+    # Copy / Paste Gene would need the ``clipboard`` permission, which 2.0.0 deliberately
+    # ships without (see the manifest): the buttons come back together with the permission.
     box.label(text=settings.family_name(), icon="FILE_PARENT")
 
     if not settings.is_valid():

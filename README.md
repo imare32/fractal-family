@@ -73,8 +73,6 @@ dragging the nodes in the viewport is the more direct way to try one.
 - **M (Mirror)** — mirror the previous level for this segment.
 - The list is ordered: the curve visits the segments in the order shown, starting at the
   origin. Dragging rows up/down reorders them.
-- **Copy Gene / Paste Gene** exchange the gene as a plain string such as
-  `G 1 0 0 0 0 1 1 0`. Pasting a malformed gene leaves the current one untouched.
 - At least two segments are required, none may be zero-length, and the total vector must
   not be zero — otherwise the panel shows what is wrong instead of generating.
 
@@ -276,12 +274,13 @@ The HUD falls back to English labels if the CJK font bundled with Blender is una
 
 ## Permissions
 
-One permission is declared: **clipboard**, used by *Paste Gene*. Nothing is written to the
-clipboard unless you press *Copy Gene*.
+**No permissions.** The add-on generates geometry and stops there: it opens no files, makes
+no network request and does not touch the clipboard. Turning points into a file is Blender's
+job or your own — there are plenty of exporters for that.
 
-No `files` permission is declared, because the add-on performs no filesystem access at all —
-it generates geometry and stops there. Turning points into a file is Blender's job or your
-own; there are plenty of exporters for that.
+Copy / Paste Gene as text would need the `clipboard` permission, so it is planned for a
+follow-up version rather than for this one (see the changelog). 1.1.6 asked for nothing
+either, so an update keeps the permission list exactly as it was.
 
 The add-on also asks the operating system how much memory is free, to size the generation
 budget (see *Output* above). That number is used locally and is never sent anywhere; no

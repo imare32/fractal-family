@@ -44,7 +44,6 @@ What changed compared to **1.1.6**, the previous published release.
   7-segment gene stops at level 6.
 - **Scene setup**: orthographic top-view camera framed on the selected curve, 2048×2048,
   Standard view transform.
-- **Copy / Paste Gene** as text.
 - **Polygon initiators**: triangle, square, pentagon, hexagon and octagon, with the side
   length derived from the total vector — closed fractals such as the Koch snowflake or a
   closed Gosper island need no hand-built curve.
@@ -149,6 +148,13 @@ What changed compared to **1.1.6**, the previous published release.
   instead of leaving stale numbers on screen.
 
 ### Changed
+
+- **Copy / Paste Gene is not part of 2.0.0.** It works, but it needs the `clipboard`
+  permission, and 1.1.6 requested none: adding one changes what the listing promises and
+  what Blender shows on install, which is the one change that can hold an update back. The
+  feature is deferred to a follow-up release, on its own, so this version keeps the
+  permission list identical to the published one. The operators are in the git history
+  (2.0.0 commit), so restoring them is a revert of two blocks plus the manifest line.
 
 - **The HUD title bar reads *Fractal Gene Editor*.** It used to say *Fractal Gene*, which
   named the thing being shown but not what the panel does; the panel is an editor, and the
@@ -264,7 +270,7 @@ What changed compared to **1.1.6**, the previous published release.
 - Blender 4.2 LTS and newer (tested on 4.2.23 and 5.2.2).
 - Windows, macOS and Linux. Only the font bundled with Blender is loaded, so no
   platform-specific paths.
-- One permission: `clipboard` (Paste Gene). No filesystem access: the add-on generates
-  geometry and keeps its own state in Blender's preference file.
+- **No permissions**: no filesystem access, no clipboard, no network. The add-on generates
+  geometry and keeps its own settings in Blender's preference file.
 - macOS/Metal ignores line widths above 1 px; the HUD draws its polyline as geometry and
   the viewport preview conveys the level through colour.
