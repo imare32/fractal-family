@@ -94,6 +94,16 @@ What changed compared to **1.1.6**, the previous published release.
 
 ### Fixed
 
+- **A shape-key object's data block is named after the object, not `<object name> L0`.**
+  The per-level datablocks of a shape-key build were created with
+  `f"{object_name} L{level}"`, and the level-0 one becomes the object's data — so
+  `E(3, 0) Snowflake Sweep L1-4 Shape-Keys` had a data block called
+  `E(3, 0) Snowflake Sweep L1-4 Shape-Keys L0`, i.e. the whole name a second time plus the
+  basis level, in a list where the plain and per-level outputs both show one short entry.
+  It was also the only name in the file that could pass the 58-character clamp and still be
+  truncated: the extra ` L0` is added *after* the clamp. The temporary curves now carry a
+  scratch name and the surviving one is renamed once the object exists, so object and data
+  read the same — `verify_p0.py` checks it.
 - **Chinese tooltips for every control in the panel.** RNA property descriptions were never
   put into the translation table, so in a Chinese UI every hover answered in English --
   `show_preview` was the one that got noticed. All fourteen drawn controls now have a

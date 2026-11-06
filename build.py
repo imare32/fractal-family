@@ -58,6 +58,13 @@ MAX_NAME = 58
 #: Curve-name slot for a gene that matches no preset (see :func:`object_name`).
 CUSTOM_NAME = "Custom Curve"
 
+#: Scratch name for the per-level curve datablocks of a shape-key build.  Only the base one
+#: survives -- it is renamed to the object name once the object exists -- and the rest are
+#: removed before the build returns.  Naming them after the object instead left a second,
+#: longer copy in the data list (``<object name> L0``), which is past :data:`MAX_NAME`
+#: before Blender's own ``.001`` suffix has even been added.
+SCRATCH_NAME = "Fractal Keys"
+
 
 def _target_collection(collection=None):
     """Where new objects are linked: the given collection > active one > scene root."""
@@ -163,10 +170,10 @@ def _build_shape_keys(settings, name, all_lines, low, high, closed, collection=N
     def build(line, level, num_segments):
         if spline_type == "SMOOTH":
             return curves.create_curve_smooth(
-                line, name=f"{name} L{level}", num_segments=num_segments, closed=closed
+                line, name=f"{SCRATCH_NAME} L{level}", num_segments=num_segments, closed=closed
             )
         return curves.create_curve_poly(
-            line, name=f"{name} L{level}", num_segments=num_segments, closed=closed
+            line, name=f"{SCRATCH_NAME} L{level}", num_segments=num_segments, closed=closed
         )
 
     temp = [build(all_lines[0], 0, subdivision ** max(0, high))]
@@ -174,6 +181,12 @@ def _build_shape_keys(settings, name, all_lines, low, high, closed, collection=N
         temp.append(build(all_lines[level], level, subdivision ** max(0, high - level)))
 
     obj = _new_object(name, temp[0], collection)
+    # The data block carries the object name, which is the convention everywhere else in
+    # Blender (and what the plain and per-level outputs already do).  Left at the scratch
+    # name it read ``<object name> L0``: the whole name a second time, plus the basis level,
+    # in a list where every other entry is one short word.  ``obj.name`` rather than ``name``
+    # because Blender may have suffixed the object on collision.
+    obj.data.name = obj.name
     if spline_type == "SMOOTH":
         curves.set_handle_type(obj.data, "AUTO")
     try:
