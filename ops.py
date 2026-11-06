@@ -40,8 +40,6 @@ __all__ = [
     "FRACTALFAMILY_OT_request_generate",
     "FRACTALFAMILY_OT_set_domain",
     "FRACTALFAMILY_OT_setup_scene",
-    "FRACTALFAMILY_OT_gene_help",
-    "FRACTALFAMILY_OT_initiator_help",
 ]
 
 
@@ -637,49 +635,6 @@ class FRACTALFAMILY_OT_clear_request(bpy.types.Operator):
     def execute(self, context):
         _settings(context).pending_generate = ""
         return {"FINISHED"}
-
-
-class FRACTALFAMILY_OT_gene_help(bpy.types.Operator):
-    """Explain the word "gene" — the tooltip *is* the explanation."""
-
-    bl_idname = "fractalfamily.gene_help"
-    bl_label = "What Is a Gene?"
-    #: One sentence, and the whole point of the button: a first-time user opening the panel
-    #: has no idea why a curve add-on talks about genes.  Hovering the ``?`` shows this;
-    #: clicking repeats it in the status bar, so the button is not a dead end.
-    bl_description = ("A gene is a short list of integer segments: each one says where the "
-                      "next copy of the curve goes. Applied again and again, it grows into "
-                      "the fractal.")
-
-    @classmethod
-    def poll(cls, context):
-        return _settings(context) is not None
-
-    def execute(self, context):
-        self.report({"INFO"}, t(self.bl_description))
-        return {"FINISHED"}
-
-
-class FRACTALFAMILY_OT_initiator_help(bpy.types.Operator):
-    """Explain the initiator — the shape the substitution is applied to first."""
-
-    bl_idname = "fractalfamily.initiator_help"
-    bl_label = "What Is the Initiator?"
-    #: The companion to the ``?`` next to Gene.  The initiator is the level-0 shape, and the
-    #: one thing that surprises people is that a polygon closes the curve -- so that is the
-    #: part worth the sentence, not the definition.
-    bl_description = ("The initiator is the shape the gene is first applied to: level 0. A "
-                      "straight line grows an open fractal, while a polygon closes it — that "
-                      "is how a Koch snowflake or a Gosper island comes out in one click.")
-
-    @classmethod
-    def poll(cls, context):
-        return _settings(context) is not None
-
-    def execute(self, context):
-        self.report({"INFO"}, t(self.bl_description))
-        return {"FINISHED"}
-
 
 
 # ---------------------------------------------------------------------------

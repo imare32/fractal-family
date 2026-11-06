@@ -8,7 +8,7 @@ automatically and therefore stay plain literals).
 
 from __future__ import annotations
 
-import time
+import unicodedata
 
 import bpy
 
@@ -19,9 +19,7 @@ from .ops import (
     FRACTALFAMILY_OT_clear_request,
     FRACTALFAMILY_OT_copy_gene,
     FRACTALFAMILY_OT_generate,
-    FRACTALFAMILY_OT_gene_help,
     FRACTALFAMILY_OT_hud,
-    FRACTALFAMILY_OT_initiator_help,
     FRACTALFAMILY_OT_item_add,
     FRACTALFAMILY_OT_item_move,
     FRACTALFAMILY_OT_item_remove,
@@ -32,16 +30,162 @@ from .ops import (
 )
 from .props import INITIATOR_SIDES
 
-__all__ = ["CATEGORY", "FRACTALFAMILY_PT_panel", "FRACTALFAMILY_UL_items"]
+__all__ = [
+    "CATEGORY",
+    "FRACTALFAMILY_PT_gene_help",
+    "FRACTALFAMILY_PT_initiator_help",
+    "FRACTALFAMILY_PT_panel",
+    "FRACTALFAMILY_UL_items",
+]
 
 #: Sidebar tab name (kept short so it fits next to other add-ons' single-line tabs).
 CATEGORY = "Fractal"
+
+#: Popover width in UI units (Blender's ``UI_UNIT_X`` is 20 px at 100 % UI scale).
+#: Measured against the real box: 20 units came out 480 px wide at UI scale 1.2 while a
+#: 52 character line only reached 296 px -- the right third of the popover sat empty.  17
+#: units is the width where a 52 character line *just* fits, which is also a comfortable
+#: measure to read; the line break itself is computed against the box by :func:`_help_width`.
+HELP_UNITS = 17
+
+#: Characters per line to aim for when the UI font cannot be measured (background runs).
+HELP_WIDTH = 52
 
 #: UIList idname.
 LIST_IDNAME = "FRACTALFAMILY_UL_items"
 
 
-def _help_row(row, title: str, help_idname: str, icon: str = "NONE"):
+def _char_width(char: str) -> int:
+    """1 for latin/punctuation, 2 for CJK and other wide glyphs (popover text width)."""
+    return 2 if unicodedata.east_asian_width(char) in {"W", "F"} else 1
+
+
+def _help_width(text: str) -> int:
+    """How many character units of *text* fit the popover, measured in the UI font.
+
+    The box is fixed in UI units, so how many characters fit depends on the font and the UI
+    scale -- a hard coded count looked right on one machine and left an empty right third on
+    the next.  Both the box and the font scale with the UI, so measuring the real sentence
+    against the real box gives the same answer everywhere.
+
+    Measuring *this* sentence matters: a sample of ``n`` overestimates the average glyph
+    (``n`` is one of the widest letters, and spaces are half of it), which is exactly how the
+    first attempt ended up wrapping far too early.  :data:`HELP_WIDTH` is the fallback for
+    background runs, where there is no font to measure.
+    """
+    total = sum(map(_char_width, text))
+    try:
+        import blf
+    except ImportError:  # pragma: no cover - blf ships with Blender
+        return HELP_WIDTH
+    try:
+        scale = bpy.context.preferences.system.ui_scale
+        # 20 px per unit, minus the inner padding on both sides (measured: ~10 px each).
+        available = (HELP_UNITS * 20.0 - 20.0) * scale
+        measured = blf.dimensions(0, text)[0]
+    except (AttributeError, TypeError, RuntimeError, ValueError):
+        return HELP_WIDTH
+    if measured <= 0.0 or not total:
+        return HELP_WIDTH
+    # 3 % slack: the last glyph of a line is followed by the box edge, not by a margin.
+    width = int(available / (measured / total) * 0.97)
+    # Outside this band the font was not really measured: in background mode ``blf`` answers
+    # with a stub metric, which would claim hundreds of characters fit.
+    return width if 30 <= width <= 100 else HELP_WIDTH
+
+
+def _wrap_help(text: str, width: int = HELP_WIDTH) -> list[str]:
+    """Split a help sentence into popover lines.
+
+    Latin breaks on spaces; a CJK run has no spaces at all, so it is cut by display width
+    instead -- ``textwrap`` would leave a Chinese sentence as one very wide line.  The cut
+    never adds a space of its own: the pieces of one word are glued back together, which is
+    what keeps a wrapped Chinese sentence readable.
+    """
+    lines: list[str] = []
+    current, used = "", 0
+    for word in text.split(" "):
+        if not word:
+            continue
+        pieces: list[str] = []
+        while sum(map(_char_width, word)) > width:
+            cut, cut_width = "", 0
+            for char in word:
+                if cut_width + _char_width(char) > width:
+                    break
+                cut += char
+                cut_width += _char_width(char)
+            pieces.append(cut)
+            word = word[len(cut):]
+        if word:
+            pieces.append(word)
+        for index, piece in enumerate(pieces):
+            # Only the first piece of a word is preceded by the space it was split on.
+            glue = " " if index == 0 and current else ""
+            size = sum(map(_char_width, piece))
+            if current and used + len(glue) + size > width:
+                lines.append(current)
+                current, used = "", 0
+                glue = ""
+            current = f"{current}{glue}{piece}"
+            used += len(glue) + size
+    if current:
+        lines.append(current)
+    return lines
+
+
+class _HelpPopover:
+    """A ``?`` that opens its explanation **in place**, anchored to the button.
+
+    A panel in the ``HEADER`` region is never drawn in the sidebar: it exists only as the
+    popover that :meth:`bpy.types.UILayout.popover` opens, so the sentence shows up under
+    the click instead of at the far end of the window in the status bar -- and it stays
+    until you click away, unlike a report that the next message overwrites.
+    """
+
+    bl_space_type = "VIEW_3D"
+    bl_region_type = "HEADER"
+    #: Popover width.  It has to be set on the panel -- wrapping in the text alone cannot
+    #: widen the box, and without it the popover picks a narrow default that elides every
+    #: line with "...".  The line break is then computed against this width by
+    #: :func:`_help_width`, so the two never drift apart.
+    bl_ui_units_x = HELP_UNITS
+
+    #: Explanation, translated when the popover is drawn.
+    explanation = ""
+
+    def draw(self, context):
+        explanation = t(self.explanation)
+        for line in _wrap_help(explanation, _help_width(explanation)):
+            self.layout.label(text=line)
+
+
+class FRACTALFAMILY_PT_gene_help(_HelpPopover, bpy.types.Panel):
+    """Explains the word "gene" right where the question mark was clicked."""
+
+    bl_label = "What Is a Gene?"
+    explanation = ("A gene is a short list of integer segments: each one says where the "
+                   "next copy of the curve goes. Applied again and again, it grows into "
+                   "the fractal. The HUD edits this same gene and stays in sync with the "
+                   "panel — dragging it in the viewport is the more direct way to try one.")
+
+
+class FRACTALFAMILY_PT_initiator_help(_HelpPopover, bpy.types.Panel):
+    """Explains the initiator: the shape the substitution is applied to first."""
+
+    bl_label = "What Is the Initiator?"
+    explanation = ("The initiator is the shape the gene is first applied to: level 0. A "
+                   "straight line grows an open fractal, while a polygon closes it — that "
+                   "is how a Koch snowflake or a Gosper island comes out in one click.")
+
+
+#: ``layout.popover`` wants the panel's *registered* idname, and for a ``Panel`` that is its
+#: class name -- ``bl_idname`` only appears on RNA after registration, not on the class.
+GENE_HELP_PANEL = FRACTALFAMILY_PT_gene_help.__name__
+INITIATOR_HELP_PANEL = FRACTALFAMILY_PT_initiator_help.__name__
+
+
+def _help_row(row, title: str, help_panel: str, icon: str = "NONE"):
     """Title on the left, a ``?`` at the right end of the same row.
 
     The label is left un-capped on purpose: a plain row stretches it across the free space,
@@ -50,26 +194,25 @@ def _help_row(row, title: str, help_idname: str, icon: str = "NONE"):
     it at the right end instead.
     """
     row.label(text=t(title), icon=icon)
-    row.operator(help_idname, text="", icon="QUESTION")
+    row.popover(help_panel, text="", icon="QUESTION")
 
 
-def _box(layout, title: str, icon: str = "NONE", help_idname: str = ""):
+def _box(layout, title: str, icon: str = "NONE", help_panel: str = ""):
     """A box whose first row is the section title.
 
     ``use_property_split`` is turned off on purpose: with it the label column takes ~40%
     of a 300 px panel and leaves controls with half a row.
 
-    ``help_idname`` adds a ``?`` button at the **right end of the title row** (see
-    :func:`_help_row`).  Its tooltip is the explanation itself, so there is nothing to open
-    or close and nothing stored on the scene.
+    ``help_panel`` adds a ``?`` button at the **right end of the title row** (see
+    :func:`_help_row`); clicking it opens the explanation as a popover right there.
     """
     box = layout.box()
     box.use_property_split = False
     box.use_property_decorate = False
-    if not help_idname:
+    if not help_panel:
         box.label(text=t(title), icon=icon)
         return box
-    _help_row(box.row(align=True), title, help_idname, icon)
+    _help_row(box.row(align=True), title, help_panel, icon)
     return box
 
 
@@ -118,9 +261,9 @@ def _hud(layout, settings):
 
 
 def _gene(layout, settings):
-    # The `?` at the right end of the title row explains the word: its tooltip is the whole
-    # explanation, so there is nothing to unfold and no state to keep.
-    box = _box(layout, "Gene", "RNA", FRACTALFAMILY_OT_gene_help.bl_idname)
+    # The `?` at the right end of the title row explains the word: clicking it opens the
+    # sentence in a popover under the button, so nothing is unfolded and no state is kept.
+    box = _box(layout, "Gene", "RNA", GENE_HELP_PANEL)
     box.prop(settings, "preset", text=t("Preset"))
     # Domain: two plain buttons with ``depress`` marking the current value.  An expanded
     # enum draws as two unlabelled buttons in 5.2 (labels get swallowed).
@@ -153,7 +296,10 @@ def _gene(layout, settings):
 
 
 def _shape(layout, settings):
-    box = _box(layout, "Level & Initiator", "MOD_SUBSURF")
+    # The `?` rides the title row, like Gene's: the box is already called "Level &
+    # Initiator", so a separate "Initiator" row above the shape buttons only repeated the
+    # word and cost a full row of the narrow panel.
+    box = _box(layout, "Level & Initiator", "MOD_SUBSURF", INITIATOR_HELP_PANEL)
     # Level: what you are editing and what the HUD/preview show (the wheel changes it).
     # The output range lives in the Generate section, hidden until switched on.
     # Plain number field (not a slider): the ‹ › step arrows are exactly the ±1 needed.
@@ -162,9 +308,7 @@ def _shape(layout, settings):
         box.label(text=tfmt("Preview stops at level {limit}", limit=settings.preview_level()),
                   icon="INFO")
     # Initiator: straight line on its own row, polygons on the next one.  Short labels
-    # ("3-gon" ...) because five options share ~49 px each.  The `?` rides the title row,
-    # same as Gene's: the word is the one piece of jargon left to explain.
-    _help_row(box.row(align=True), "Initiator", FRACTALFAMILY_OT_initiator_help.bl_idname)
+    # ("3-gon" ...) because five options share ~49 px each.
     column = box.column(align=True)
     column.enabled = not settings.initiator_custom
     column.row(align=True).prop_enum(settings, "initiator_shape", "LINE", text=t("Line"))

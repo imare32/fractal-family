@@ -52,6 +52,9 @@ translation_dict = {
         # --- panel buttons / hints ---------------------------------------
         ("*", "HUD"): "HUD",
         ("*", "How to use the HUD"): "HUD 使用说明",
+        ("*", "Everything here edits the same settings as the sidebar panel, and the two "
+              "stay in sync"):
+            "这里改的和侧栏面板是同一套参数，两边实时同步",
         ("*", "Drag a node to move it on the lattice — it always snaps to integer points"):
             "拖动节点在点阵上移动，总是吸附到整数格点",
         ("*", "Click R / M on a segment to toggle its reverse / mirror flag"):
@@ -73,14 +76,16 @@ translation_dict = {
         ("*", "What Is a Gene?"): "什么是基因？",
         ("*", "A gene is a short list of integer segments: each one says where the "
               "next copy of the curve goes. Applied again and again, it grows into "
-              "the fractal."):
+              "the fractal. The HUD edits this same gene and stays in sync with the "
+              "panel — dragging it in the viewport is the more direct way to try one."):
             "基因就是一小串整数段：每一段说明曲线的下一份副本放在哪里。"
-            "把它反复套用，就长出分形。",
-        ("*", "What Is the Initiator?"): "什么是初始形状？",
+            "把它反复套用，就长出分形。HUD 改的是同一个基因，与面板实时同步——"
+            "在视口里直接拖动更直观、也更方便。",
+        ("*", "What Is the Initiator?"): "什么是初始折线？",
         ("*", "The initiator is the shape the gene is first applied to: level 0. A "
               "straight line grows an open fractal, while a polygon closes it — that "
               "is how a Koch snowflake or a Gosper island comes out in one click."):
-            "初始形状是基因第一次替换所作用的那个图形，也就是第 0 级。直线长出开放的分形，"
+            "初始折线是基因第一次替换所作用的那条线，也就是第 0 级。直线长出开放的分形，"
             "多边形则把它闭合——Koch 雪花、闭合的 Gosper 岛就是这么一键生成的。",
         ("*", "Editing"): "编辑",
         ("*", "Preview"): "预览",
@@ -99,7 +104,7 @@ translation_dict = {
             "第 {level} 级约需 {count:,} 点（上限 {limit:,}），最高可到第 {max} 级",
 
         # --- initiator ----------------------------------------------------
-        ("*", "Initiator"): "初始形状",
+        ("*", "Initiator"): "初始折线",
         ("*", "Line"): "直线",
         ("*", "Triangle"): "正三角形",
         ("*", "Square"): "正方形",
@@ -109,7 +114,7 @@ translation_dict = {
         ("*", "{sides}-gon"): "{sides} 边",
         ("*", "Curve"): "曲线",
         ("*", "No curve selected: currently a straight line"): "还没选曲线：当前等于直线",
-        ("*", "Custom Curve"): "自定义曲线",
+        ("*", "Custom Initiator Curve"): "自定义初始折线",
         ("*", "Initiator Curve"): "初始曲线",
         ("*", "Reverse"): "反向",
         ("*", "Reverse Initiator Direction"): "反向初始折线方向",
@@ -132,6 +137,68 @@ translation_dict = {
             "这一段放入的上一级曲线首尾反向（R）",
         ("*", "Mirror the previous level for this segment (M)"):
             "这一段放入的上一级曲线镜面翻转（M）",
+
+        # --- property tooltips --------------------------------------------
+        # Blender translates an RNA ``description`` through the same table as everything
+        # else, with the "*" context; a missing entry is an English tooltip in a Chinese
+        # UI, which is exactly how ``show_preview`` shipped.
+        ("*", "Draw the current level directly in the 3D viewport, so you can see the gene "
+              "change while you edit it"):
+            "把当前等级直接画在 3D 视口里，改基因时就能看到曲线跟着变",
+        ("*", "Pick a classic gene (applied immediately, then still editable)"):
+            "挑一个经典基因（立即套用，之后仍可编辑）",
+        ("*", "Level being edited and previewed — the HUD wheel changes this one. "
+              "Substitution count: level 0 is the initiator, level 1 the gene itself, every "
+              "level above replaces each segment with the whole previous level"):
+            "正在编辑、正在预览的等级——HUD 上的滚轮改的就是它。等级是替换次数：第 0 级是"
+            "初始折线，第 1 级是基因本身，再往上每一级都把每一段换成完整的上一级",
+        ("*", "Initiator polyline (level 0): a straight line or a regular polygon. Polygons "
+              "are computed on the fly with the side length equal to the total vector, so "
+              "closed fractals such as the Koch snowflake work with one click. To use your "
+              "own curve, enable Custom Initiator Curve below"):
+            "第 0 级的初始折线：一条直线或一个正多边形。正多边形按「边长 = 总向量」现算，"
+            "所以 Koch 雪花这类闭合分形一键就能出来。要用自己的曲线，勾选下面的"
+            "「自定义初始折线」",
+        ("*", "Read the initiator points in reverse order (grows inwards instead of "
+              "outwards)"):
+            "把初始折线的顶点倒着读（向内长而不是向外长）",
+        ("*", "Use the curve object below as the initiator polyline (the shape choice above "
+              "is kept and comes back when unchecked)"):
+            "用下面的曲线对象作为初始折线（上面的形状选择会保留，取消勾选就恢复）",
+        ("*", "Custom initiator polyline (first spline only, object transform ignored). "
+              "Only used when Custom Initiator Curve is enabled"):
+            "自定义初始折线（只取第一条样条，忽略对象变换）。仅在勾选「自定义初始折线」时生效",
+        ("*", "Spline type of the generated curves: polyline (straight segments) or smooth "
+              "(Bézier with automatic handles)"):
+            "生成曲线的样条类型：多段线（点与点之间直线连接）或贝塞尔（自动控制柄，点与点"
+            "之间平滑）",
+        ("*", "Write several levels instead of only the current one. Each level becomes its "
+              "own object unless Join Levels is enabled"):
+            "一次写入多级，而不只是当前这一级。除非勾选「合并为一个对象」，否则每级各成一个对象",
+        ("*", "Put every level of the range into one object, one spline per level. Off: one "
+              "object per level"):
+            "把范围内的每一级都放进同一个对象，每级一条样条。关闭时每级一个对象",
+        ("*", "First level written to the object. Equal to Range To writes that one level; a "
+              "wider range writes every level, one object per level unless Join Levels is "
+              "on. Output only — the HUD and preview keep using Level"):
+            "写进对象的第一个等级。与「结束等级」相同就只写这一级；范围更宽时每一级都写——"
+            "除非勾选「合并为一个对象」，否则每级各成一个对象。「输出范围」只影响生成结果——"
+            "HUD 和预览仍然跟随「等级」",
+        ("*", "Last level written to the object (output only). Substitution count: level 0 "
+              "is the initiator, level 1 the gene itself, every level above replaces each "
+              "segment with the whole previous level"):
+            "写进对象的最后一个等级（仅输出用）。等级是替换次数：第 0 级是初始折线，第 1 级"
+            "是基因本身，再往上每一级都把每一段换成完整的上一级",
+        ("*", "How the preview line is coloured: the level's own fixed colour (so the colour "
+              "tells you which level you are looking at, levels above 6 share the last "
+              "one), or one colour you pick yourself"):
+            "预览线的上色方式：每级一种固定颜色（颜色即等级，第 6 级以上共用最后一种），"
+            "或统一用你自己选的单一颜色",
+        ("*", "Line colour in Single Colour mode (sRGB)"):
+            "单一颜色模式下线条的颜色（sRGB）",
+        ("*", "Lattice: G = Gaussian integers (square), E = Eisenstein integers "
+              "(triangular)"):
+            "点阵：G = 高斯整数（方点阵），E = 艾森斯坦整数（三角点阵）",
 
         # --- enum items ---------------------------------------------------
         ("*", "Gaussian G"): "高斯 G",
@@ -188,7 +255,7 @@ translation_dict = {
             "正交俯视 · 取景 {scale:.2f} · 2048×2048 · Standard 色彩变换",
 
         # --- HUD (drawn with blf, translated via i18n.t) ------------------
-        ("*", "Fractal Gene"): "分形基因",
+        ("*", "Fractal Gene Editor"): "分形基因编辑",
         ("*", "+ Seg"): "加段",
         ("*", "- Seg"): "删段",
         ("*", "Fit"): "适应",
@@ -206,8 +273,6 @@ translation_dict = {
         ("Operator", "Switch Lattice Domain"): "切换点阵域",
         ("Operator", "HUD Gene Editor"): "HUD 编辑基因",
         ("Operator", "Dismiss"): "知道了",
-        ("Operator", "What Is a Gene?"): "什么是基因？",
-        ("Operator", "What Is the Initiator?"): "什么是初始形状？",
         ("Operator", "Cancel"): "取消",
 
         # --- operator tooltips -------------------------------------------
@@ -332,10 +397,11 @@ def _classes():
         ops.FRACTALFAMILY_OT_hud,
         ops.FRACTALFAMILY_OT_clear_notice,
         ops.FRACTALFAMILY_OT_clear_request,
-        ops.FRACTALFAMILY_OT_gene_help,
-        ops.FRACTALFAMILY_OT_initiator_help,
         ops.FRACTALFAMILY_OT_request_generate,
         ui.FRACTALFAMILY_PT_panel,
+        # Popover-only panels: never drawn in the sidebar, opened by the ``?`` buttons.
+        ui.FRACTALFAMILY_PT_gene_help,
+        ui.FRACTALFAMILY_PT_initiator_help,
     )
 
 

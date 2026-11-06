@@ -203,7 +203,10 @@ def panel_height() -> float:
 #: layer (:mod:`hud`) and injected as ``state["t"]``: ``blf`` paints raw strings, and
 #: Blender never sees them, so nothing else can translate them.
 LABELS = {
-    "title": "Fractal Gene",
+    # The title says what the panel is *for*, not just what it shows: it edits the gene in
+    # place.  "Editor" also makes the sync story below ("the same parameters as the panel")
+    # read as one tool in two places rather than two independent panels.
+    "title": "Fractal Gene Editor",
     "level": "Level",
     "add": "+ Seg",
     "remove": "- Seg",
@@ -226,6 +229,9 @@ def label(state, key: str) -> str:
 #: Help card shown by the ``?`` button in the header (English msgids).
 HELP_TITLE = "How to use the HUD"
 HELP_LINES = (
+    # First, because it answers "did I break my settings?" before the user asks: the HUD is
+    # not a separate copy of the gene, it is the same settings edited closer to the curve.
+    "Everything here edits the same settings as the sidebar panel, and the two stay in sync",
     "Drag a node to move it on the lattice — it always snaps to integer points",
     "Click R / M on a segment to toggle its reverse / mirror flag",
     "Wheel changes the level · Shift+wheel zooms · F fits the view",
@@ -239,6 +245,22 @@ HELP_FOOTER = "Click anywhere to close this help"
 def _text_width(text: str, size: float) -> float:
     """Approximate advance width in pixels (this layer has no font metrics)."""
     return sum(size * (1.0 if ord(char) > 0x2E80 else 0.52) for char in text)
+
+
+def _elide(text: str, size: float, max_width: float) -> str:
+    """Cut *text* to *max_width*, ending with ``…`` when something had to go.
+
+    The header text is the only string in the panel that can grow without a limit: the
+    family is ``G(a, b)`` of the gene's total vector, and a segment dragged far out gives a
+    three-digit pair.  It must not run underneath the domain / help / close buttons.
+    """
+    if _text_width(text, size) <= max_width:
+        return text
+    ellipsis = size * 1.0  # a wide glyph in this approximation
+    keep = text
+    while keep and _text_width(keep, size) + ellipsis > max_width:
+        keep = keep[:-1]
+    return keep.rstrip(" ·") + "…"
 
 
 def _wrap_text(text: str, size: float, max_width: float):
@@ -564,15 +586,19 @@ def build(state) -> dict:
     ))
 
     # 标题栏文字
+    button_size = HEADER_HEIGHT - 8
+    # 右侧从右往左排着 × → ? → G / E 四个方块，标题只能用它们左边的宽度；家族名里的总向量
+    # 可以是大数，所以这里必须量宽度截断，不能靠"一般不会这么长"。
+    title_right = origin_x + width - 4.0 * button_size - 17.0 - 6.0
     family = state.get("family") or ""
     title = f"{label(state, 'title')} · {family}" if family else label(state, "title")
     primitives.append(_text(origin_x + 10, origin_y + height - HEADER_HEIGHT + 8,
-                            title, 11.5, theme["header_text"]))
+                            _elide(title, 11.5, title_right - origin_x - 10), 11.5,
+                            theme["header_text"]))
     hotspots.append(_rect_hotspot(origin_x, origin_y + height - HEADER_HEIGHT,
                                   width, HEADER_HEIGHT, "bar", "bar"))
 
     # 标题栏右侧（从右往左）：关闭 × → 帮助 ? → 域切换 G / E
-    button_size = HEADER_HEIGHT - 8
     close_x = origin_x + width - button_size - 6
     close_y = origin_y + height - HEADER_HEIGHT + 4
     _window_button(primitives, hotspots, close_x, close_y, button_size, "×",

@@ -44,7 +44,7 @@ __all__ = [
     "register",
 ]
 
-#: 「正多边形」初始形状 → 边数（:attr:`GenFractalFamilySettings.initiator_shape`）。
+#: 「正多边形」初始折线 → 边数（:attr:`GenFractalFamilySettings.initiator_shape`）。
 INITIATOR_SIDES = {
     "TRIANGLE": 3,
     "SQUARE": 4,
@@ -174,7 +174,7 @@ def _curve_points(curve, reverse: bool = False):
 def _curve_shape(curve):
     """``(段数, 是否闭合)``，不把点列读出来。
 
-    :func:`scene.fractalfamily` 的签名与估点数每帧都要问一次初始曲线有几段；为此把整条
+    :func:`scene.fractalfamily` 的签名与估点数每帧都要问一次初始折线有几段；为此把整条
     曲线的点都过一遍 RNA，长曲线会让视口掉帧。
     """
     if curve is None or not getattr(curve, "splines", None) or not curve.splines:
@@ -206,7 +206,7 @@ def _curve_sample(curve, limit: int = 8):
 
 
 def _on_initiator_curve(self, context):
-    """指定了曲线对象就顺手勾上「自定义曲线」—— 否则填了曲线却不生效，很难猜。
+    """指定了曲线对象就顺手勾上「自定义初始折线」—— 否则填了曲线却不生效，很难猜。
 
     那个开关自己的 ``update`` 会标脏 + 排重算，这里不用再补一次。
     """
@@ -355,9 +355,9 @@ class GenFractalFamilySettings(bpy.types.PropertyGroup):
 
     level_from: bpy.props.IntProperty(
         name="Range From",
-        description=("First level written to the object. Equal to Range To gives a single "
-                     "curve; a wider range puts every level into one object, one spline per "
-                     "level. Output only — the HUD and preview keep using Level"),
+        description=("First level written to the object. Equal to Range To writes that one "
+                     "level; a wider range writes every level, one object per level unless "
+                     "Join Levels is on. Output only — the HUD and preview keep using Level"),
         default=1,
         min=LEVEL_MIN,
         max=LEVEL_MAX,
@@ -399,7 +399,7 @@ class GenFractalFamilySettings(bpy.types.PropertyGroup):
         description=("Initiator polyline (level 0): a straight line or a regular polygon. "
                      "Polygons are computed on the fly with the side length equal to the "
                      "total vector, so closed fractals such as the Koch snowflake work with "
-                     "one click. To use your own curve, enable Custom Curve below"),
+                     "one click. To use your own curve, enable Custom Initiator Curve below"),
         items=[
             ("LINE", "Line", "A straight line from the origin to the total vector (default)"),
             ("TRIANGLE", "Triangle", "Closed regular triangle: Koch snowflake"),
@@ -413,7 +413,10 @@ class GenFractalFamilySettings(bpy.types.PropertyGroup):
     )
 
     initiator_custom: bpy.props.BoolProperty(
-        name="Custom Curve",
+        # "Initiator" in the label: the generated object name already carries ``Custom
+        # Curve`` for a gene that matches no preset, and the two must not read as the same
+        # thing.
+        name="Custom Initiator Curve",
         description=("Use the curve object below as the initiator polyline (the shape "
                      "choice above is kept and comes back when unchecked)"),
         default=False,
@@ -423,7 +426,7 @@ class GenFractalFamilySettings(bpy.types.PropertyGroup):
     initiator_curve: bpy.props.PointerProperty(
         name="Initiator Curve",
         description=("Custom initiator polyline (first spline only, object transform "
-                     "ignored). Only used when Custom Curve is enabled"),
+                     "ignored). Only used when Custom Initiator Curve is enabled"),
         type=bpy.types.Curve,
         update=_on_initiator_curve,
     )
@@ -565,7 +568,8 @@ class GenFractalFamilySettings(bpy.types.PropertyGroup):
         """Preset name if the gene is still that exact preset, else ``""``.
 
         Used in the generated object's name: an untouched preset stays recognisable
-        (``… G(1, 1) Dragon Curve``), an edited gene falls back to the family only.
+        (``… G(1, 1) Dragon Curve``), an edited gene returns ``""`` so the caller can put
+        its own placeholder (``Custom Curve``) in that slot.
         """
         item = GENES_BY_NAME.get(str(self.preset))
         if item and item["gene"] == self.current_gene():
@@ -612,7 +616,7 @@ class GenFractalFamilySettings(bpy.types.PropertyGroup):
 
         来源分两种（见 :attr:`initiator_custom`）：
 
-        * **勾了「自定义曲线」**：读 :attr:`initiator_curve` 的第 1 条样条；
+        * **勾了「自定义初始折线」**：读 :attr:`initiator_curve` 的第 1 条样条；
         * 否则按 :attr:`initiator_shape`：``LINE`` 是直线（返回 ``None``，交给
           :func:`lattice.teragon` 现算），正多边形按总向量现算（边长 = ``|总向量|``），
           不用建任何数据块。
@@ -864,7 +868,7 @@ class GenFractalFamilySettings(bpy.types.PropertyGroup):
         return int(self.level) > self.preview_level()
 
     def geometry_signature(self):
-        """预览缓存键：基因 / 域 / 等级 / 初始形状与曲线一变就换一份。"""
+        """预览缓存键：基因 / 域 / 等级 / 初始折线（形状与曲线）一变就换一份。"""
         elements = tuple((item.a, item.b, bool(item.reverse), bool(item.mirror)) for item in self.items)
         initiator = self.initiator_curve
         initiator_key = initiator.name if initiator else ""

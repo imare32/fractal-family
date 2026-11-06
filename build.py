@@ -1,10 +1,15 @@
 """Generation: expand the teragon and write it as **one curve object**, one spline per level.
 
-The object name describes the design — level range, initiator, gene family and, for an
-untouched preset, the preset name::
+The object name describes the design, most distinguishing part first — gene family, the
+preset it is still identical to (``Custom Curve`` when it is not), level range and finally
+the initiator::
 
-    Fractal L4 Line G(1, 1) Dragon Curve
-    Fractal L1-4 6gon-rev E(2, 1)
+    G(1, 1) Dragon Curve L4 3gon
+    E(2, 1) Custom Curve L1-4 6gon-rev
+    E(3, 0) Koch Curve L1-5 Shape-Keys Bézier
+
+No fixed prefix, and the default straight-line initiator is left out: every character is
+spent on something that tells two generated objects apart.
 
 Generating always creates a **new** object.  If the name is already taken Blender appends
 ``.001``; nothing that already exists is modified or deleted, so materials, modifiers or
@@ -45,11 +50,13 @@ OWNER_KEY = "fractalfamily_owner"
 LEVEL_KEY = "fractalfamily_level"
 #: Set only when the budget forced a lower level than the user asked for.
 REQUESTED_KEY = "fractalfamily_requested_level"
-#: Name prefix.
-NAME_PREFIX = "Fractal"
 
-#: Blender truncates datablock names at 63 bytes; clamp a little earlier.
+#: Blender truncates datablock names at 63 bytes; clamp a little earlier.  The slack is what
+#: Blender's ``.001`` collision suffix and its own truncation may take.
 MAX_NAME = 58
+
+#: Curve-name slot for a gene that matches no preset (see :func:`object_name`).
+CUSTOM_NAME = "Custom Curve"
 
 
 def _target_collection(collection=None):
@@ -58,25 +65,43 @@ def _target_collection(collection=None):
 
 
 def _initiator_token(settings) -> str:
-    """Short, readable description of the initiator (part of the object name)."""
+    """Short, readable description of the initiator (part of the object name).
+
+    A plain straight line is the default initiator and gets **no token at all**: it says
+    nothing about a result you would otherwise confuse, and "Line-rev" is the same segment
+    drawn backwards, so the flag is dropped with it.  A custom curve is prefixed ``Init:``
+    rather than ``Curve:`` so it is not read as the curve-name slot (which itself says
+    ``Custom Curve`` when no preset matched).
+    """
     if settings.initiator_custom:
         curve = settings.initiator_curve
-        token = f"Curve:{curve.name}" if curve is not None else "Curve"
+        token = f"Init:{curve.name}" if curve is not None else "Init"
     else:
         sides = INITIATOR_SIDES.get(str(settings.initiator_shape))
-        token = f"{sides}gon" if sides else "Line"
+        if not sides:
+            return ""
+        token = f"{sides}gon"
     if settings.initiator_reverse:
         token += "-rev"
     return token
 
 
 def object_name(settings, keys: bool = False, levels=None) -> str:
-    """``Fractal L<range>[ Keys][ Bézier] <initiator> <family>[ <preset>]``.
+    """``<family> <curve> L<range>[ Shape-Keys][ Bézier][ <initiator>]``.
 
-    The family (``G(1, 1)``) is short and readable where the raw gene is not.  If the gene
-    still matches an untouched preset, the preset name is appended too, so the outliner
-    reads like ``Fractal L4 Line G(1, 1) Dragon Curve``; an edited gene falls back to the
-    family alone.  The ``Keys`` marker keeps the shape-key object apart from the plain one.
+    The most distinguishing part comes first: the family (``G(1, 1)``) is short and readable
+    where the raw gene is not, and the curve name follows it, so the outliner reads like
+    ``G(1, 1) Dragon Curve L4 3gon`` in the same order as the preset dropdown.  An edited
+    gene keeps the slot and says ``Custom Curve`` -- the shape of the name never changes, so
+    a name is still parsed the same way at a glance whether or not a preset matched.  Level
+    range and flags follow, the initiator last -- both are what makes two results of the same
+    gene differ, and they are the part that may be lost to truncation.
+
+    ``Shape-Keys`` is spelled out rather than abbreviated to ``Keys``: it is read in the
+    outliner next to objects that look the same, and it has to be obvious at a glance that
+    this object morphs instead of holding one spline per level.  The hyphen keeps it one
+    token -- the rest of the name is space separated, so "Shape Keys" would read as a
+    property of the level followed by an unrelated word.
 
     ``Poly`` splines are the default and stay unmarked; a smooth curve carries ``Bézier``,
     because that is the difference you cannot see in the outliner -- two objects at the same
@@ -91,19 +116,19 @@ def object_name(settings, keys: bool = False, levels=None) -> str:
         levels = settings.keys_range() if keys else settings.level_range()
     low, high = levels
     levels_text = f"L{low}" if low == high else f"L{low}-{high}"
-    mode = " Keys" if keys else ""
+    mode = " Shape-Keys" if keys else ""
     # "Bézier" is the label Blender itself uses for a BEZIER spline, and it is spelled with
     # the accent in its own source; the name is datablock text, not interface text, so it
     # is not translated.
     smooth = " Bézier" if str(settings.spline_type) == "SMOOTH" else ""
-    parts = [NAME_PREFIX, f"{levels_text}{mode}{smooth}", _initiator_token(settings),
-             settings.family_name()]
-    preset = settings.preset_name()
-    if preset:
-        parts.append(preset)
-    # Blender truncates datablock names at 63 bytes; clamp here so the name we look up
-    # later is exactly the name the object gets.
-    return " ".join(parts)[:MAX_NAME]
+    # Same, untranslated: "Custom Curve" is the placeholder in the slot the preset name
+    # would occupy.  The slot is never empty, so every generated name has the same shape.
+    curve = settings.preset_name() or CUSTOM_NAME
+    parts = [settings.family_name(), curve,
+             f"{levels_text}{mode}{smooth}", _initiator_token(settings)]
+    # Blender truncates datablock names at 63 bytes; clamp here so the name stays readable
+    # instead of being cut at an arbitrary byte by Blender itself.
+    return " ".join(part for part in parts if part)[:MAX_NAME]
 
 
 def initiator_points(settings):

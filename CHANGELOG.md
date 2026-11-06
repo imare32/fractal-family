@@ -13,16 +13,21 @@ What changed compared to **1.1.6**, the previous published release.
 ### Added
 
 - **A `?` at the right end of the Gene title** answers the one question a first-time user
-  has: why does a curve add-on talk about genes? Hovering it shows a single sentence — the
-  gene is a short list of integer segments, each one saying where the next copy of the
-  curve goes, and applying it over and over grows the fractal. That tooltip *is* the
-  feature: nothing is unfolded, nothing is stored on the scene, and a user who already knows
-  the idea sees a small `?` and nothing else. Clicking it repeats the sentence in the status
-  bar, so the button is not a dead end.
-- **The same `?` on the Initiator row**, for the other piece of jargon in the panel: it
-  says the initiator is the level-0 shape, and that a polygon initiator is what closes the
-  curve (Koch snowflake, Gosper island). Both buttons sit at the right end of their row and
-  share one helper, so a third explanation later is a one-line addition.
+  has: why does a curve add-on talk about genes? Clicking it opens **a popover anchored to
+  the button** — in place, and it stays up until you click away. The sentence says the gene
+  is a short list of integer segments, each one telling where the next copy of the curve
+  goes, and that applying it over and over grows the fractal; it then points at the HUD,
+  which edits the same gene and stays in sync, because dragging the nodes in the viewport is
+  the more direct way to try one. A status-bar report was the first version and it read
+  badly: the sentence appeared at the
+  far end of the window and the next message overwrote it.
+- **The same `?` on the Level & Initiator title row**, for the other piece of jargon in the
+  panel: it says the initiator is the level-0 shape, and that a polygon initiator is what
+  closes the curve (Koch snowflake, Gosper island). It rides the box title instead of a row
+  of its own -- the title already says "Initiator", and a separate label row above the shape
+  buttons cost the narrow panel a full line for a repeated word. Both buttons share one
+  helper and one popover draw (a `Panel` in the `HEADER` region, so it never shows up as a
+  second sidebar section), which makes a third explanation a one-line addition.
 - **HUD gene editor**: opens in the bottom-left corner, above Blender's own *Adjust Last
   Operation* panel — it steps up by that panel's height, and gives the clearance up only in
   a viewport too short to hold both. Drag the gene nodes on the lattice (always snapped to
@@ -90,6 +95,15 @@ What changed compared to **1.1.6**, the previous published release.
 
 ### Fixed
 
+- **Chinese tooltips for every control in the panel.** RNA property descriptions were never
+  put into the translation table, so in a Chinese UI every hover answered in English --
+  `show_preview` was the one that got noticed. All fourteen drawn controls now have a
+  translated name and tooltip, and `verify_ui.py` fails if a control the panel draws has no
+  entry.
+- **The `Range From` tooltip no longer contradicts `Join Levels`.** It claimed a wider range
+  "puts every level into one object, one spline per level" -- that is what Join Levels does.
+  Measured: range 1–3 with Join Levels off writes three objects, with it on one object with
+  three splines; the tooltip now says so.
 - **Click-scoped UI state is no longer saved into `.blend` files.** Saving during a build, or
   with the over-budget question open, used to reopen with `running_fraction = 1.0`: the panel
   drew the progress bar in place of the Generate buttons and no modal existed any more to
@@ -136,6 +150,13 @@ What changed compared to **1.1.6**, the previous published release.
 
 ### Changed
 
+- **The HUD title bar reads *Fractal Gene Editor*.** It used to say *Fractal Gene*, which
+  named the thing being shown but not what the panel does; the panel is an editor, and the
+  word makes the relationship to the sidebar panel obvious. The help card and the gene
+  popover now say it out loud as well: the HUD edits **the same settings** as the sidebar
+  panel and the two stay in sync, so a gene can be started in one place and finished in the
+  other — and editing on top of the curve is the more direct of the two, because what you
+  drag is what you see.
 - **Generate asks before writing less.** The old flow silently wrote the highest level that
   fit and left a `Wrote level 20, not 24` notice with a `Level 24 anyway` button; users
   reasonably objected to having spent several GB on a curve they never agreed to. Now the
@@ -167,11 +188,26 @@ What changed compared to **1.1.6**, the previous published release.
   **Join Levels** (off by default) puts the whole range into one object instead, one spline
   per level. The range is output only — the HUD and the preview always use *Level* (the
   wheel changes it).
-- Generated objects are named from the level range, the initiator and the gene family, e.g.
-  `Fractal L1-4 6gon-rev E(2, 1)`; an untouched preset also gets its name appended
-  (`Fractal L4 Line G(1, 1) Dragon Curve`). The level in the name is the one that was
-  written, never the requested one. Each Generate creates a new object; a name collision
-  gets Blender's `.001` suffix, and existing objects are never modified or removed.
+- **One Chinese word for the initiator: 初始折线.** The panel title already said that while
+  the help popover said 初始形状 and the switch said 自定义初始曲线 -- each string had been
+  translated on its own. Every one of them, plus `README.zh-CN.md`, now uses the panel's word;
+  the only 曲线 left is the Curve datablock pointer, which is literally a curve.
+- Generated objects are named **family first, then the curve, then the level range and the
+  initiator**, e.g. `G(1, 1) Dragon Curve L4 3gon`. The curve slot holds the preset name, or
+  `Custom Curve` when the gene matches none, so the shape of the name never changes and
+  reads the same way as the preset dropdown. **No fixed prefix**, and the default
+  straight-line initiator is omitted — the characters go to what tells two results apart.
+  Shape keys are marked `Shape-Keys` in full, not `Keys`, and hyphenated so the marker
+  stays one token among space separated ones: the outliner is the only place it shows, and
+  the object has to be recognisable as the morphing one at a glance. A custom initiator is
+  prefixed `Init:` (`… L4 Init:MySquare`) so it cannot be read as the curve-name slot. The
+  level in the name is the one that was written, never the requested one. Each Generate
+  creates a new object; a name collision gets Blender's `.001` suffix, and existing objects
+  are never modified or removed.
+- **The `Custom Curve` switch is now `Custom Initiator Curve`.** A gene that matches no
+  preset names its object `Custom Curve`, so the two sat in the same words one click apart
+  and meant different things: one is the initiator, the other is the identity of the gene.
+  The initiator is the only one that gets "Initiator" in the label.
 - **Shape-key output** (`Generate Shape Keys` button): one object whose base shape is the
   initiator (level 0) and which carries one key for every level from 1 to the last level —
   shape keys always cover all levels, while the plain curve follows the output range.

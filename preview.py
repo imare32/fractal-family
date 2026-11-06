@@ -81,7 +81,7 @@ _BATCH = {"key": None, "items": []}
 def _initiator(settings):
     """初始折线 ``(points, closed)``；直线时返回 ``(None, False)``。
 
-    来源（直线 / 正多边形 / 自定义曲线）由
+    来源（直线 / 正多边形 / 自定义初始折线）由
     :meth:`props.GenFractalFamilySettings.initiator` 决定，与生成共用同一份。
     """
     return settings.initiator()

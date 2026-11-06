@@ -110,7 +110,7 @@ def _bezier_points(curve, points, closed: bool):
 # ---------------------------------------------------------------------------
 
 
-def new_curve(name: str = "Fractal"):
+def new_curve(name: str = "Curve"):
     """An empty curve datablock to be filled with :func:`append_spline`.
 
     Filling it level by level is what makes streaming possible: the datablock is created
@@ -131,7 +131,7 @@ def append_spline(curve, points, spline_type: str = "POLY", closed: bool = False
     return _poly_points(curve, array, closed)
 
 
-def create_curve(lines, name: str = "Fractal", spline_type: str = "POLY", closed: bool = False):
+def create_curve(lines, name: str = "Curve", spline_type: str = "POLY", closed: bool = False):
     """One curve datablock with one spline per entry of ``lines`` (lowest level first)."""
     curve = new_curve(name)
     for line in lines:
@@ -168,7 +168,7 @@ def _subdivide_poly(array, num_segments: int, closed: bool):
     return points
 
 
-def create_curve_poly(points, name: str = "Fractal", num_segments: int = 1, closed: bool = False):
+def create_curve_poly(points, name: str = "Curve", num_segments: int = 1, closed: bool = False):
     """Single POLY spline, linearly subdivided so the vertex count is predictable."""
     array = np.asarray(points, dtype=float).reshape(-1, 2)
     array = _subdivide_poly(array, num_segments, closed)
@@ -177,7 +177,7 @@ def create_curve_poly(points, name: str = "Fractal", num_segments: int = 1, clos
     return curve
 
 
-def create_curve_smooth(points, name: str = "Fractal", num_segments: int = 1, closed: bool = False):
+def create_curve_smooth(points, name: str = "Curve", num_segments: int = 1, closed: bool = False):
     """Single BEZIER spline, subdivided without changing its shape.
 
     The subdivision is shape-preserving (the Bezier segments are cut into pieces), so the

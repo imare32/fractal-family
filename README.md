@@ -60,10 +60,12 @@ Work in **Top View** (`Numpad 7`): the curves are generated on the XY plane.
 
 ### The gene
 
-"Gene" is a strange word to meet in a curve add-on. Hover the **`?`** at the right end of the
-**Gene** title and one sentence appears: **a gene is a short list of integer segments, each
-saying where the next copy of the curve goes; apply it over and over and it grows into the
-fractal.** (Clicking the button repeats the same sentence in the status bar.)
+"Gene" is a strange word to meet in a curve add-on. Click the **`?`** at the right end of the
+**Gene** title and the explanation opens in a popover right under the button, where it stays
+until you click away: **a gene is a short list of integer segments, each saying where the next
+copy of the curve goes; apply it over and over and it grows into the fractal.** It closes by
+pointing at the HUD: that editor changes this same gene and stays in sync with the panel, and
+dragging the nodes in the viewport is the more direct way to try one.
 
 - **A / B** — the complex integer of a segment (real and imaginary part in `G`; in `E`, the
   coefficients of `1` and `ω`).
@@ -98,8 +100,8 @@ choice.
 
 ### Initiator
 
-The level-0 shape is what the first substitution is applied to. Hover the **`?`** at the
-right end of the **Initiator** row and one sentence appears:
+The level-0 shape is what the first substitution is applied to. Click the **`?`** at the
+right end of the **Level & Initiator** title and one sentence appears in a popover there:
 
 > **The initiator is the shape the gene is first applied to: level 0. A straight line grows
 > an open fractal, while a polygon closes it — that is how a Koch snowflake or a Gosper
@@ -111,7 +113,8 @@ The choices are:
 - **3-gon … 8-gon** — closed regular polygons, with the side length derived from the total
   vector, so closed fractals such as the Koch snowflake or a closed Gosper island need no
   hand-built curve.
-- **Custom Curve** — any curve object's first spline (the object transform is ignored).
+- **Custom Initiator Curve** — any curve object's first spline (the object transform is
+  ignored).
 
 **Reverse Initiator Direction** reads the initiator backwards. For a line that means the
 fractal grows from the total vector back to the origin (the same shape turned half a turn);
@@ -213,9 +216,13 @@ you applied earlier survive.
 
 Press **HUD** at the top of the panel to edit the gene directly in the viewport; the button
 stays highlighted while the panel is open, and pressing it again closes the panel.
+Everything the HUD edits is the **same setting** as the sidebar panel — the two stay in sync,
+so you can start a gene in one place and finish it in the other. Editing on top of the curve
+is also the more direct of the two: what you drag is what you see.
 The panel opens in the bottom-left corner — **above Blender's own *Adjust Last Operation*
 panel**, so neither covers the other — and can be dragged anywhere from its title bar.
-The `?` button in its title bar opens a help card with the same controls:
+The `?` button in its title bar (*Fractal Gene Editor*) opens a help card with the same
+controls:
 
 | Action | Result |
 | --- | --- |
@@ -241,14 +248,23 @@ in the viewport. With nothing selected it falls back to the current preview.
 
 ### Object naming
 
-Generated objects are named from the level range, the initiator and the gene's family; an
-untouched preset also gets its name appended:
+Generated objects are named family first, then the curve (the preset name, or `Custom
+Curve` when the gene matches none), then the level range and finally the initiator:
 
 ```
-Fractal L4 Line G(1, 1) Dragon Curve
-Fractal L2-4 6gon-rev E(2, 1)
-Fractal L1-5 Keys Line G(1, 1) Koch Curve
+G(1, 1) Dragon Curve L4 3gon
+E(2, 1) Custom Curve L2-4 6gon-rev
+E(3, 0) Koch Curve L1-5 Shape-Keys Bézier
+G(1, 1) Dragon Curve L4 Init:MySquare
 ```
+
+The shape of the name is fixed, so it can be read at a glance whether or not a preset
+matched. There is no prefix, and the default straight-line initiator is omitted — every
+character goes to something that tells two results apart. `Shape-Keys` is spelled out
+rather than shortened to `Keys`, and hyphenated so it stays one token: the outliner is the
+only place it shows, and it has to be obvious that the object morphs instead of holding one
+spline per level. A custom initiator is prefixed `Init:` so it cannot be mistaken for the
+curve-name slot.
 
 The name is a label, not a fingerprint: two different genes in the same family, with the
 same range and initiator, produce the same name (the newer one gets `.001`).
@@ -274,9 +290,8 @@ network access is involved.
 The measured speed factor is an ordinary add-on **preference**, which Blender stores in
 its own preference file — that is why it survives a restart without the add-on touching the
 disk, and why nothing is left behind when it is uninstalled. It is the only thing the
-add-on stores: the budget has no setting to store. (The
-initiator curve you pick with *Custom Curve* is read through Blender's data API, not from
-disk.)
+add-on stores: the budget has no setting to store. (The initiator curve you pick with
+*Custom Initiator Curve* is read through Blender's data API, not from disk.)
 
 ## Limitations
 
