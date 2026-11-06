@@ -29,6 +29,7 @@ from .props import LEVEL_MAX, LEVEL_MIN
 
 __all__ = [
     "FRACTALFAMILY_OT_clear_notice",
+    "FRACTALFAMILY_OT_clear_request",
     "FRACTALFAMILY_OT_copy_gene",
     "FRACTALFAMILY_OT_generate",
     "FRACTALFAMILY_OT_hud",
@@ -36,8 +37,11 @@ __all__ = [
     "FRACTALFAMILY_OT_item_move",
     "FRACTALFAMILY_OT_item_remove",
     "FRACTALFAMILY_OT_paste_gene",
+    "FRACTALFAMILY_OT_request_generate",
     "FRACTALFAMILY_OT_set_domain",
     "FRACTALFAMILY_OT_setup_scene",
+    "FRACTALFAMILY_OT_gene_help",
+    "FRACTALFAMILY_OT_initiator_help",
 ]
 
 
@@ -150,6 +154,11 @@ class FRACTALFAMILY_OT_generate(bpy.types.Operator):
 
     #: Ignore the budget (set by the "level N anyway" button inside the notice).
     force: bpy.props.BoolProperty(default=False, options={"HIDDEN"})
+
+    #: Explicit level for this one build, or ``0`` to use the scene's Level.  Set by the
+    #: choice buttons so "generate the level that fits" writes exactly the number it named,
+    #: without moving the scene's Level (which also drives the HUD and the preview).
+    level: bpy.props.IntProperty(default=0, min=0, options={"HIDDEN"})
 
     #: Modal state (per call; the class values are only defaults).
     _job = None
@@ -338,8 +347,9 @@ class FRACTALFAMILY_OT_generate(bpy.types.Operator):
             # built in one pass (the keys need every level at once), so a modal cannot
             # interrupt them -- it would only add a frame.
             return False
-        requested = settings.level_range()[1]
-        top = requested if self.force else min(requested, settings.output_level_limit())
+        requested = int(self.level) if int(self.level) > 0 else settings.level_range()[1]
+        limit = settings.output_level_limit()
+        top = requested if (self.force or int(self.level) > 0) else min(requested, limit)
         # Build time only: evaluation happens after the operator returns, so it cannot be
         # reported or interrupted -- counting it would put a modal on a 60 ms build whose
         # slow half is not ours to control.
@@ -349,23 +359,70 @@ class FRACTALFAMILY_OT_generate(bpy.types.Operator):
         """Calibrate, clamp to the budget, check memory, and open the job."""
         settings = _settings(context)
         settings.error = ""
+        # Either answer closes the question; a scripted call finds nothing to clear.
+        settings.pending_generate = ""
 
         # First click on this machine: time a tiny build so the budget knows how fast this
         # CPU is. ~4 ms, once per session.
         budget.ensure_calibration()
         sysinfo.clear_cache()  # the click is exactly when a fresh reading matters
 
-        requested = settings.level_range()[1]
+        # An explicit level is a one-off choice from the panel.  It never touches the
+        # scene's Level, so the HUD and the preview still show what the user is editing.
+        explicit = int(self.level) > 0
+        requested = int(self.level) if explicit else settings.level_range()[1]
+        # Only shape keys begin at level 1: one key per level is what they *are*.  For a
+        # curve, the low end comes from the Output Range switch -- with it off that is the
+        # requested level itself, i.e. a single curve.  An explicit ``level`` (either answer
+        # in the over-budget choice) used to be lumped in with ``keys`` here, which wrote
+        # "L1-24" for a user who had never enabled Output Range and priced just the top
+        # level while writing the entire ladder.
+        low = LEVEL_MIN if self.keys else settings.level_range()[0]
         allowed = settings.shape_key_level() if self.keys else settings.output_level_limit()
+        # An explicit level or an insisted build names its level: write exactly it, without
+        # re-clamping to a budget that was computed for a different request.
+        top = requested if (self.force or explicit) else min(requested, allowed)
+        first = LEVEL_MIN if self.keys else min(low, top)
 
-        if self.force:
-            first, top = (LEVEL_MIN, requested) if self.keys else settings.level_range()
-        else:
-            top = min(requested, allowed)
-            first = LEVEL_MIN if self.keys else min(settings.level_range()[0], top)
+        # Hard limit, and the one ``force`` must never cross.  The point budget above is a
+        # policy: 25 % of free memory and ten seconds, both chosen for comfort.  A user is
+        # entitled to override it -- they may be about to close the other file, or simply
+        # not mind waiting.  But a build whose predicted peak exceeds the memory that is
+        # *actually free right now* is not a comfort question: the allocation happens inside
+        # an uninterruptible C call, so the OS starts swapping and no amount of ESC brings
+        # the window back.  See :data:`budget.REFUSE_FRACTION`.
+        #
+        # This is checked on the level that is about to be **written**, not the requested
+        # one: a degraded build is small enough to pass even when the request itself was
+        # refused.  Shape keys price their points differently, and get the same wall.
+        state, reason, safe, info = settings.output_verdict(
+            keys=self.keys, level=top, low=first)
+        if state == budget.REFUSE:
+            settings.notice_kind = "REFUSED"
+            settings.notice_requested = requested
+            settings.notice_actual = safe
+            if reason == budget.REFUSE_MEMORY:
+                message = tfmt(
+                    "Level {level} needs about {size}, but only {avail} is free. "
+                    "Generating it would freeze this machine, so it was not written",
+                    level=top, size=_size(info["needed_mb"]),
+                    avail=_size(info["available_mb"]),
+                )
+            else:
+                message = tfmt(
+                    "Level {level} would take about {minutes} minutes to build. "
+                    "It was not written",
+                    level=top, minutes=int(round(info["seconds"] / 60.0)),
+                )
+            settings.error = message
+            preview.tag_redraw()
+            # WARNING, not ERROR: a refusal is a normal answer on a small machine, and
+            # ``bpy.ops`` turns an ERROR report into a RuntimeError that aborts scripts.
+            raise _Abort(message, "WARNING")
 
-        # Last resort: even the level we would write is not safe.  Show it in the viewport
-        # instead of writing a datablock (the preview budget is a fraction of this one).
+        # Last resort for a build that is allowed by the physical limit but too close to it
+        # to be wise: show it in the viewport instead of writing a datablock.  ``force``
+        # skips this one (it is a policy, and the user just insisted), but not the wall above.
         if not self.keys and not self.force:
             needed = budget.estimate_mb(
                 settings.estimate_written(top, first), settings.spline_type)
@@ -523,6 +580,105 @@ class FRACTALFAMILY_OT_clear_notice(bpy.types.Operator):
         settings.error = ""
         return {"FINISHED"}
 
+
+class FRACTALFAMILY_OT_request_generate(bpy.types.Operator):
+    """The panel's Generate buttons: ask first when the requested level is over budget."""
+
+    bl_idname = "fractalfamily.request_generate"
+    bl_label = "Generate Fractal Curves"
+    bl_description = ("Check the requested level before writing anything. A level over this "
+                      "machine's budget asks whether to write the level that fits or to "
+                      "insist on the requested one")
+
+    keys: bpy.props.BoolProperty(default=False, options={"HIDDEN"})
+
+    @classmethod
+    def poll(cls, context):
+        settings = _settings(context)
+        # The panel replaces its buttons with the progress bar while a build runs, but a
+        # scripted call does not go through the panel.  Letting one set ``pending_generate``
+        # mid-build hid the question behind the bar and sprang it on the user afterwards,
+        # priced for a state that no longer existed.
+        return settings is not None and settings.running_fraction < 0.0
+
+    def execute(self, context):
+        settings = _settings(context)
+        # ``poll`` can be bypassed by an explicit EXEC_DEFAULT; repeat the guard where the
+        # state is actually written.
+        if settings.running_fraction >= 0.0:
+            return {"CANCELLED"}
+        # The panel is the only caller; a scripted EXEC_DEFAULT still goes straight to
+        # ``fractalfamily.generate`` and keeps its one-click behaviour.
+        sysinfo.clear_cache()
+        state, _reason, _safe, _info = settings.output_verdict(keys=self.keys)
+        if state == budget.FITS:
+            settings.pending_generate = ""
+            return bpy.ops.fractalfamily.generate(
+                "INVOKE_DEFAULT", keys=self.keys, force=False)
+        # Nothing is written yet.  The panel now quotes the numbers and offers the choices;
+        # REFUSE simply offers fewer of them.
+        settings.pending_generate = "KEYS" if self.keys else "CURVE"
+        settings.clear_notice()
+        return {"FINISHED"}
+
+
+class FRACTALFAMILY_OT_clear_request(bpy.types.Operator):
+    """Cancel a pending Generate without writing anything."""
+
+    bl_idname = "fractalfamily.clear_request"
+    bl_label = "Cancel"
+    bl_description = "Cancel this build without generating anything"
+
+    @classmethod
+    def poll(cls, context):
+        settings = _settings(context)
+        return settings is not None and bool(settings.pending_generate)
+
+    def execute(self, context):
+        _settings(context).pending_generate = ""
+        return {"FINISHED"}
+
+
+class FRACTALFAMILY_OT_gene_help(bpy.types.Operator):
+    """Explain the word "gene" — the tooltip *is* the explanation."""
+
+    bl_idname = "fractalfamily.gene_help"
+    bl_label = "What Is a Gene?"
+    #: One sentence, and the whole point of the button: a first-time user opening the panel
+    #: has no idea why a curve add-on talks about genes.  Hovering the ``?`` shows this;
+    #: clicking repeats it in the status bar, so the button is not a dead end.
+    bl_description = ("A gene is a short list of integer segments: each one says where the "
+                      "next copy of the curve goes. Applied again and again, it grows into "
+                      "the fractal.")
+
+    @classmethod
+    def poll(cls, context):
+        return _settings(context) is not None
+
+    def execute(self, context):
+        self.report({"INFO"}, t(self.bl_description))
+        return {"FINISHED"}
+
+
+class FRACTALFAMILY_OT_initiator_help(bpy.types.Operator):
+    """Explain the initiator — the shape the substitution is applied to first."""
+
+    bl_idname = "fractalfamily.initiator_help"
+    bl_label = "What Is the Initiator?"
+    #: The companion to the ``?`` next to Gene.  The initiator is the level-0 shape, and the
+    #: one thing that surprises people is that a polygon closes the curve -- so that is the
+    #: part worth the sentence, not the definition.
+    bl_description = ("The initiator is the shape the gene is first applied to: level 0. A "
+                      "straight line grows an open fractal, while a polygon closes it — that "
+                      "is how a Koch snowflake or a Gosper island comes out in one click.")
+
+    @classmethod
+    def poll(cls, context):
+        return _settings(context) is not None
+
+    def execute(self, context):
+        self.report({"INFO"}, t(self.bl_description))
+        return {"FINISHED"}
 
 
 

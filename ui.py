@@ -12,17 +12,21 @@ import time
 
 import bpy
 
-from . import hud, preview, sysinfo
+from . import budget, hud, preview, sysinfo
 from .i18n import t, tfmt
 from .ops import (
     FRACTALFAMILY_OT_clear_notice,
+    FRACTALFAMILY_OT_clear_request,
     FRACTALFAMILY_OT_copy_gene,
     FRACTALFAMILY_OT_generate,
+    FRACTALFAMILY_OT_gene_help,
     FRACTALFAMILY_OT_hud,
+    FRACTALFAMILY_OT_initiator_help,
     FRACTALFAMILY_OT_item_add,
     FRACTALFAMILY_OT_item_move,
     FRACTALFAMILY_OT_item_remove,
     FRACTALFAMILY_OT_paste_gene,
+    FRACTALFAMILY_OT_request_generate,
     FRACTALFAMILY_OT_set_domain,
     FRACTALFAMILY_OT_setup_scene,
 )
@@ -37,16 +41,35 @@ CATEGORY = "Fractal"
 LIST_IDNAME = "FRACTALFAMILY_UL_items"
 
 
-def _box(layout, title: str, icon: str = "NONE"):
+def _help_row(row, title: str, help_idname: str, icon: str = "NONE"):
+    """Title on the left, a ``?`` at the right end of the same row.
+
+    The label is left un-capped on purpose: a plain row stretches it across the free space,
+    which is what parks the button at the right edge.  Do **not** set ``alignment="LEFT"``
+    here -- that pulls the button up against the text, and every help row in the panel puts
+    it at the right end instead.
+    """
+    row.label(text=t(title), icon=icon)
+    row.operator(help_idname, text="", icon="QUESTION")
+
+
+def _box(layout, title: str, icon: str = "NONE", help_idname: str = ""):
     """A box whose first row is the section title.
 
     ``use_property_split`` is turned off on purpose: with it the label column takes ~40%
     of a 300 px panel and leaves controls with half a row.
+
+    ``help_idname`` adds a ``?`` button at the **right end of the title row** (see
+    :func:`_help_row`).  Its tooltip is the explanation itself, so there is nothing to open
+    or close and nothing stored on the scene.
     """
     box = layout.box()
     box.use_property_split = False
     box.use_property_decorate = False
-    box.label(text=t(title), icon=icon)
+    if not help_idname:
+        box.label(text=t(title), icon=icon)
+        return box
+    _help_row(box.row(align=True), title, help_idname, icon)
     return box
 
 
@@ -95,7 +118,9 @@ def _hud(layout, settings):
 
 
 def _gene(layout, settings):
-    box = _box(layout, "Gene", "RNA")
+    # The `?` at the right end of the title row explains the word: its tooltip is the whole
+    # explanation, so there is nothing to unfold and no state to keep.
+    box = _box(layout, "Gene", "RNA", FRACTALFAMILY_OT_gene_help.bl_idname)
     box.prop(settings, "preset", text=t("Preset"))
     # Domain: two plain buttons with ``depress`` marking the current value.  An expanded
     # enum draws as two unlabelled buttons in 5.2 (labels get swallowed).
@@ -137,8 +162,9 @@ def _shape(layout, settings):
         box.label(text=tfmt("Preview stops at level {limit}", limit=settings.preview_level()),
                   icon="INFO")
     # Initiator: straight line on its own row, polygons on the next one.  Short labels
-    # ("3-gon" ...) because five options share ~49 px each.
-    box.label(text=t("Initiator"))
+    # ("3-gon" ...) because five options share ~49 px each.  The `?` rides the title row,
+    # same as Gene's: the word is the one piece of jargon left to explain.
+    _help_row(box.row(align=True), "Initiator", FRACTALFAMILY_OT_initiator_help.bl_idname)
     column = box.column(align=True)
     column.enabled = not settings.initiator_custom
     column.row(align=True).prop_enum(settings, "initiator_shape", "LINE", text=t("Line"))
@@ -223,11 +249,13 @@ def _progress(column, settings):
         return
 
     # No bar here: the wait is real but unmeasurable, so it is described instead of faked.
-    column.label(
-        text=tfmt("Points done · preparing the viewport: {count:,} points",
-                  count=settings.running_points),
-        icon="TIME",
-    )
+    # Two lines, not one: at ~250 px the sidebar clips the middle of a single
+    # "Points done · preparing the viewport: 16,777,217 points" into
+    # "Points done · pre...6,777,217 points" -- exactly the number that matters is left
+    # half-eaten.  BLANK1 keeps the second line aligned under the first one's text.
+    column.label(text=t("Points done · preparing the viewport"), icon="TIME")
+    column.label(text=tfmt("{count:,} points", count=settings.running_points),
+                 icon="BLANK1")
 
 
 def _notice(box, settings):
@@ -253,36 +281,107 @@ def _notice(box, settings):
         column.label(text=tfmt("Wrote level {actual} over the budget", actual=actual),
                      icon="ERROR")
         return
+    if kind == "REFUSED":
+        # ``settings.error`` names the level, the size and the free memory.
+        column.label(text=settings.error or t("This level cannot be generated"),
+                     icon="ERROR")
+        return
 
     column.label(text=tfmt("Wrote level {actual}, not {requested}",
                            actual=actual, requested=requested), icon="ERROR")
+    # No "level N anyway" here.  Over budget is decided *before* anything is written now
+    # (:func:`_choice`), and this leftover from the old silent-degradation flow named a
+    # level it did not carry in its operator: changing Level or Output Range between the
+    # notice and the click made it write a completely different build.  The choice row is
+    # the only place that may insist.
+    column.operator(FRACTALFAMILY_OT_clear_notice.bl_idname, text=t("Keep"))
+
+
+def _choice(column, settings):
+    """The two answers to "your requested level is over budget".
+
+    Drawn **in place of** the Generate buttons, so the user's eye never leaves the row they
+    just clicked.  ``REFUSE`` omits the insist button entirely -- see :func:`_choice_detail`.
+    """
+    keys = settings.pending_generate == "KEYS"
+    state, _reason, _safe, info = settings.output_verdict(keys=keys)
+
+    # One decision per row.  Three buttons side by side in a ~250 px sidebar truncated both
+    # labels to "Generate lev..." / "Level 24 any...", which is exactly the wrong place to
+    # be vague: the user is choosing between a safe build and a risky one.
+    degrade = column.operator(FRACTALFAMILY_OT_generate.bl_idname,
+                              text=tfmt("Generate level {level}", level=info["allowed"]),
+                              icon="CHECKMARK")
+    degrade.keys = keys
+    degrade.force = False
+    degrade.level = info["allowed"]
+
+    if state != budget.REFUSE:
+        insist = column.operator(FRACTALFAMILY_OT_generate.bl_idname,
+                                 text=tfmt("Level {level} anyway", level=info["level"]),
+                                 icon="ERROR")
+        insist.keys = keys
+        insist.force = True
+        insist.level = info["level"]
+
+
+def _choice_detail(box, settings):
+    """Why the question is being asked, with the numbers that make it answerable."""
+    keys = settings.pending_generate == "KEYS"
+    state, reason, safe, info = settings.output_verdict(keys=keys)
+    column = box.column(align=True)
+    if state == budget.REFUSE and reason == budget.REFUSE_MEMORY:
+        column.label(text=t("Not enough memory"), icon="ERROR")
+        column.label(text=tfmt("Level {level} needs {size}, {avail} free",
+                               level=info["level"], size=_size(info["needed_mb"]),
+                               avail=_size(info["available_mb"])))
+        column.label(text=t("Generating it anyway is not offered"), icon="INFO")
+    elif state == budget.REFUSE:
+        column.label(text=t("Build would take too long"), icon="ERROR")
+        column.label(text=tfmt("About {minutes} min · generating anyway is not offered",
+                               minutes=int(round(info["seconds"] / 60.0))))
+    else:
+        column.label(text=tfmt("Level {level} · {size}",
+                               level=info["level"], size=_size(info["needed_mb"])), icon="INFO")
+        column.label(text=tfmt("About {seconds} · level {level} fits the budget",
+                               seconds=_seconds(info["seconds"]), level=info["allowed"]))
+    # Without this, greyed-out controls read as a broken panel rather than a decision in
+    # progress.  The Cancel button below is the way out.
+    column.label(text=t("Settings locked · Cancel to edit"), icon="INFO")
+    column.separator()
     row = column.row(align=True)
-    button = row.operator(FRACTALFAMILY_OT_generate.bl_idname,
-                          text=tfmt("Level {level} anyway", level=requested), icon="ERROR")
-    button.force = True
-    button.keys = False
-    row.operator(FRACTALFAMILY_OT_clear_notice.bl_idname, text=t("Keep"))
+    row.operator(FRACTALFAMILY_OT_clear_request.bl_idname, text=t("Cancel"), icon="X")
 
 
 def _output(layout, settings, context):
     box = _box(layout, "Generate", "OUTLINER_OB_CURVE")
+    # The choice row quotes memory and time for one particular configuration.  Freeze every
+    # control that changes what Generate writes while that question is on screen: switching
+    # Output Range on replaces ``level_range()`` with ``(level_from, level_to)`` and roughly
+    # doubles the points, so an answer priced for a single level 24 would write a ladder.
+    # Cancel (in :func:`_choice_detail`) is how you get back to editing.
+    choosing = bool(settings.pending_generate)
+
     # Spline type belongs with the output, so it sits right above the button.  Expanded
     # enum (segmented buttons): two options, one click less than a dropdown, and the
     # current value stays visible.  Do **not** pass ``text=""``: the labels get swallowed
     # and only a blue highlight remains (5.2).
     box.label(text=t("Spline"))
     row = box.row(align=True)
+    row.enabled = not choosing
     row.prop(settings, "spline_type", expand=True)
 
     # Output range: off by default (write the current level only). Switching it on reveals
     # the two range fields and enables Join Levels; it does not touch their values.
     row = box.row(align=True)
+    row.enabled = not choosing
     row.prop(settings, "use_range", text=t("Output Range"))
     join = row.row(align=True)
     join.enabled = settings.use_range
     join.prop(settings, "join_objects", text=t("Join Levels"))
     if settings.use_range:
         row = box.row(align=True)
+        row.enabled = not choosing
         row.prop(settings, "level_from")
         row.prop(settings, "level_to")
 
@@ -303,7 +402,9 @@ def _output(layout, settings, context):
                   icon="INFO")
 
     # Two separate buttons: a curve with one spline per level, or one object that morphs
-    # between levels through shape keys.
+    # between levels through shape keys.  They ask first rather than silently writing less:
+    # :func:`_choice` replaces this row with the two answers when the requested level is
+    # over budget.
     column = box.column(align=True)
     column.scale_y = 1.3
     # While a build runs the two buttons are replaced by its progress: the row is where the
@@ -311,34 +412,39 @@ def _output(layout, settings, context):
     # first (the operator would be re-invoked while its own timer is running).
     if settings.running_fraction >= 0.0:
         _progress(column, settings)
+    elif settings.pending_generate:
+        _choice(column, settings)
     else:
         button = column.operator(
-            FRACTALFAMILY_OT_generate.bl_idname, text=t("Generate Curve"), icon="CURVE_DATA"
+            FRACTALFAMILY_OT_request_generate.bl_idname,
+            text=t("Generate Curve"), icon="CURVE_DATA"
         )
         button.keys = False
-        button.force = False
         button = column.operator(
-            FRACTALFAMILY_OT_generate.bl_idname, text=t("Generate Shape Keys"),
-            icon="SHAPEKEY_DATA"
+            FRACTALFAMILY_OT_request_generate.bl_idname,
+            text=t("Generate Shape Keys"), icon="SHAPEKEY_DATA"
         )
         button.keys = True
-        button.force = False
+
+    if settings.pending_generate:
+        _choice_detail(box, settings)
+        _notice(box, settings)
+        return
 
     # Below the buttons, not above them: the sentence belongs to the click, so it reads as a
     # note on what that click will do -- after the user has found the button, not as a
-    # footnote to the cost line that is skimmed past on the way there.  Two lines, not one:
-    # at ~250 px the sidebar cuts a single "Performance warning · writes level 22"
-    # mid-word, and the second line repeats the requested level so it stands on its own.
+    # footnote to the cost line that is skimmed past on the way there.
     if over_budget is not None:
         limit, level = over_budget
-        box.label(text=t("Performance warning"), icon="ERROR")
+        box.label(text=t("Over budget"), icon="INFO")
         # A build that just came back short says the same numbers one line further down
         # ("Writes level 20, not 24" / "Wrote level 20, not 24").  Keep the header over it
         # and drop the future tense, so the panel speaks once instead of stuttering.
         squashed = (settings.notice_kind == "DEGRADED"
                     and int(settings.notice_requested) == level)
         if not squashed:
-            box.label(text=tfmt("Writes level {limit}, not {level}", limit=limit, level=level))
+            box.label(text=tfmt("Would write level {limit}, not {level}",
+                                limit=limit, level=level))
 
     _notice(box, settings)
 

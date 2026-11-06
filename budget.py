@@ -69,8 +69,15 @@ from . import sysinfo
 from .i18n import t, tfmt
 
 __all__ = [
+    "FITS",
     "FRACTALFAMILY_AP_preferences",
+    "OVERRUN",
     "POLICY",
+    "REFUSE",
+    "REFUSE_FRACTION",
+    "REFUSE_MEMORY",
+    "REFUSE_SECONDS",
+    "REFUSE_TIME",
     "Snapshot",
     "build_seconds",
     "bytes_per_point",
@@ -85,6 +92,7 @@ __all__ = [
     "preview_budget",
     "snapshot",
     "speed_factor",
+    "verdict",
 ]
 
 #: Cost of one **written** point on the reference machine (i9-14900KF, 5.2.2), measured
@@ -175,6 +183,32 @@ CALIBRATION_SLOPE_NS = 45.0
 #: those two rules fired, which is exactly what this policy is supposed to avoid; a machine
 #: with enough memory and speed to reach the level is entitled to build it.
 POLICY = {"target_s": 10.0, "mem_fraction": 0.25}
+
+#: Where "the user may insist" ends and "this would hang the machine" begins.
+#:
+#: The budget above is a *policy*: it holds back 75 % of the free memory on the theory that
+#: Blender keeps growing after the build.  A user is entitled to disagree with that -- they
+#: may know they are not going to render, or that they will close the other file first.  So
+#: asking for more is allowed, and the panel asks instead of silently writing less.
+#:
+#: But there is a floor under that permission.  Two numbers make it:
+#:
+#: ``REFUSE_FRACTION`` -- a build whose predicted peak exceeds this much of the memory that
+#: is *actually available right now* is not "big", it is swapping.  Past that point the
+#: allocation is a C call inside ``numpy``/Blender that Python cannot interrupt, so ``ESC``
+#: does not save the user: the OS pages to disk, the window stops responding, and the
+#: process may be killed by the OS.  That is the failure this add-on exists to avoid, and no
+#: click should be able to cause it.
+#:
+#: ``REFUSE_SECONDS`` -- the time-side twin.  Time alone is *not* a reason to refuse: the
+#: build is modal, sliced at ~25 ms, and shows a progress bar, so waiting a few minutes is a
+#: visible wait the user asked for, not a hang.  This only catches the absurd end, where the
+#: predicted build + evaluation alone is measured in hours and the bar would look frozen.
+#:
+#: Both are decisions, not reports: the panel quotes the real figures and says which limit
+#: it hit, so a refusal never reads as an arbitrary "no".
+REFUSE_FRACTION = 0.85
+REFUSE_SECONDS = 600.0
 
 #: Preview is redrawn on every edit, so it gets a fraction of the output budget and a hard
 #: ceiling of its own: 120 000 points is ~5 ms, and going much past that makes editing lag.
@@ -463,6 +497,47 @@ def eval_seconds(points: int, spline_type: str = "POLY",
 def estimate_mb(points: int, spline_type: str = "POLY") -> float:
     """Predicted memory for ``points`` written points."""
     return max(0, int(points)) * bytes_per_point(spline_type) / 1048576.0
+
+
+#: The three answers a requested level can get, from most to least permitted.
+#:
+#: ``"FITS"``      -- inside the budget: Generate writes it, nothing to ask.
+#: ``"OVERRUN"``   -- above the budget but safe to build if the user insists: the panel asks,
+#:                    and ``force`` is allowed.  This is the "you will wait, and it will take
+#:                    a big slice of RAM" case -- a choice, not a hazard.
+#: ``"REFUSE"``    -- predicted to exceed what is physically available right now, or to take
+#:                    over an hour of build time.  No option is offered, because neither "yes"
+#:                    nor "no" is a real choice once the machine starts swapping: the build is
+#:                    an uninterruptible allocation, so the result is a frozen window, not a
+#:                    curve.  The panel shows the numbers and the highest level that does fit.
+FITS = "FITS"
+OVERRUN = "OVERRUN"
+REFUSE = "REFUSE"
+
+#: Why a request was refused, so the panel can name the limit instead of just saying no.
+REFUSE_MEMORY = "MEMORY"
+REFUSE_TIME = "TIME"
+
+
+def verdict(*, needed_mb: float, seconds: float, fits: bool,
+            available) -> tuple[str, str]:
+    """``(verdict, reason)`` for one requested build.
+
+    The caller has already priced it: ``needed_mb`` is the predicted peak, ``seconds`` the
+    predicted build + evaluation, ``fits`` whether it is inside the ordinary budget, and
+    ``available`` the free physical memory in bytes (``None`` on an unknown platform).
+    Keeping the arithmetic out makes the classifier the same for curves and shape keys --
+    the two price their points differently, but "85 % of free RAM is the wall" is one rule.
+
+    ``available is None`` skips the memory test rather than inventing a limit: a machine
+    whose memory cannot be read is exactly the machine where a guess would be wrong.
+    """
+    if available is not None and available > 0:
+        if needed_mb * 1048576.0 > available * REFUSE_FRACTION:
+            return REFUSE, REFUSE_MEMORY
+    if seconds > REFUSE_SECONDS:
+        return REFUSE, REFUSE_TIME
+    return (FITS if fits else OVERRUN), ""
 
 
 # ---------------------------------------------------------------------------

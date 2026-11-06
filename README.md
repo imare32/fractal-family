@@ -60,6 +60,11 @@ Work in **Top View** (`Numpad 7`): the curves are generated on the XY plane.
 
 ### The gene
 
+"Gene" is a strange word to meet in a curve add-on. Hover the **`?`** at the right end of the
+**Gene** title and one sentence appears: **a gene is a short list of integer segments, each
+saying where the next copy of the curve goes; apply it over and over and it grows into the
+fractal.** (Clicking the button repeats the same sentence in the status bar.)
+
 - **A / B** — the complex integer of a segment (real and imaginary part in `G`; in `E`, the
   coefficients of `1` and `ω`).
 - **R (Reverse)** — traverse the previous level backwards for this segment.
@@ -93,7 +98,14 @@ choice.
 
 ### Initiator
 
-The level-0 shape is what the first substitution is applied to:
+The level-0 shape is what the first substitution is applied to. Hover the **`?`** at the
+right end of the **Initiator** row and one sentence appears:
+
+> **The initiator is the shape the gene is first applied to: level 0. A straight line grows
+> an open fractal, while a polygon closes it — that is how a Koch snowflake or a Gosper
+> island comes out in one click.**
+
+The choices are:
 
 - **Line** (default) — from the origin to the total vector.
 - **3-gon … 8-gon** — closed regular polygons, with the side length derived from the total
@@ -147,12 +159,27 @@ section prints the number it ended up with (`45.5 GB free · up to 6,622,516 poi
 is also the reason a level gets reduced. The level field goes up to 24 for everybody;
 Generate writes the highest level that fits under that point count, and says so.
 
-Asking for more is not an error: Generate writes the highest level that fits and says so
-(`Wrote level 20, not 24`). The object is named after what it actually holds, and keeps the
-original request in its `fractalfamily_requested_level` property. If you do want the full
-thing, **Level 24 anyway** next to that message does it in one click — the button only exists
-inside the notice, so a second confirmation dialog would add nothing, and it is the one path
-that can freeze Blender.
+**Over budget asks first, it does not silently write less.** When the requested level is
+above this machine's budget, pressing **Generate Curve / Generate Shape Keys** writes
+nothing; the panel offers two answers in place of the buttons — **Generate level 20** (the
+level that fits the budget) and **Level 24 anyway** — with the memory and time each one
+costs, plus **Cancel**. The chosen level applies to that one build only: the scene's
+**Level** field is untouched, so the HUD and the preview keep showing what you are editing.
+Objects are named after the level they actually hold; an insisted build also keeps the
+original request in `fractalfamily_requested_level`.
+
+**When "anyway" is not offered.** The budget is a *policy* (a quarter of free memory, ten
+seconds) and you may disagree with it. Physical memory is not a policy. If the predicted
+peak exceeds 85 % of the memory that is actually free right now, or the predicted build +
+evaluation runs to about ten minutes, the panel shows only the level that fits and
+**Cancel**, with the numbers that caused the refusal. The allocation happens inside a C
+call that Python cannot interrupt: once the OS starts swapping, neither the progress bar
+nor `ESC` brings the window back, so that is not a slow build, it is a frozen machine. The
+wall applies to *every* path, a scripted `force=True` included. The post-build notice
+is informational only — it no longer carries an "anyway" button, because the decision is
+made before anything is written. Conversely, as long as it fits, a build far over the
+budget is still your call: a sliced build has a progress bar and can be cancelled, which is
+a visible wait rather than a hang.
 
 **Generate Shape Keys** writes one object that morphs: the base shape is the initiator,
 every level from 1 to the last becomes a key, and animating **Shape Key Time** (Evaluation

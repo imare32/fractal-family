@@ -19,6 +19,7 @@ import bpy
 import numpy as np
 
 from . import budget
+from . import sysinfo
 from .lattice import (
     DOMAINS,
     ComplexInteger,
@@ -108,6 +109,12 @@ def _mark_dirty(self, context):
     if settings is None:
         return
     settings.dirty = True
+    # The over-budget question quotes memory and time for the settings as they were when
+    # Generate was clicked.  The output controls are greyed out while it is on screen, but
+    # Level, presets, gene segments and the initiator are edited elsewhere (and by the HUD
+    # and by scripts).  Any such edit invalidates those numbers: drop the question rather
+    # than let the user answer a stale one.  Usually a no-op.
+    settings.pending_generate = ""
 
 
 def _on_domain_change(self, context):
@@ -129,6 +136,9 @@ def _preset_items(self, context):
 
 def _on_preset_change(self, context):
     """选中预设 → 直接把基因写进去（与原版一致：选完就能看）。"""
+    # This callback does not go through :func:`_mark_dirty`, so the stale-question guard
+    # has to be here too: a different gene means a completely different point count.
+    self.pending_generate = ""
     item = GENES_BY_NAME.get(self.preset)
     if item:
         self.apply_gene(item["gene"])
@@ -427,6 +437,15 @@ class GenFractalFamilySettings(bpy.types.PropertyGroup):
     )
 
     # --- 状态（只读，面板上显示） -----------------------------------------
+    #
+    # Two kinds of state live here.  ``last_*`` / ``dirty`` describe the *file* (what was
+    # generated, whether edits are pending) and travel with it.  Everything marked
+    # ``SKIP_SAVE`` describes **one click** -- a progress bar, a pending question, a
+    # notice -- and must not.  A .blend saved mid-build used to reopen with
+    # ``running_fraction = 1.0``: the panel drew a progress bar instead of the Generate
+    # buttons, and no modal operator existed any more to clear it, so generation was
+    # unreachable until the user restarted.  ``reset_transient_state`` is the second half
+    # of the fix: it also rescues files saved by older versions of the add-on.
 
     dirty: bpy.props.BoolProperty(name="Pending", default=True)
 
@@ -442,16 +461,16 @@ class GenFractalFamilySettings(bpy.types.PropertyGroup):
     #: The panel draws the bar from these two rather than from a status-bar string: the
     #: status bar is far from the button the user just clicked, and on a multi-million point
     #: build it is the only feedback for several seconds.
-    running_fraction: bpy.props.FloatProperty(default=-1.0)
+    running_fraction: bpy.props.FloatProperty(default=-1.0, options={"SKIP_SAVE"})
 
     #: Current / top level of the running build (``0`` when nothing is running).
-    running_level: bpy.props.IntProperty(default=0)
+    running_level: bpy.props.IntProperty(default=0, options={"SKIP_SAVE"})
 
-    running_high: bpy.props.IntProperty(default=0)
+    running_high: bpy.props.IntProperty(default=0, options={"SKIP_SAVE"})
 
     #: Points expanded so far / in total for the running build, straight from the job -- not
     #: re-derived from the gene, which the user may have changed mid-build.
-    running_points: bpy.props.IntProperty(default=0)
+    running_points: bpy.props.IntProperty(default=0, options={"SKIP_SAVE"})
 
     #: How long the build itself takes, and how long the dependency-graph evaluation after it
     #: takes.  Both are predicted before the click (see :mod:`budget`).
@@ -461,31 +480,43 @@ class GenFractalFamilySettings(bpy.types.PropertyGroup):
     #: a bar advance through it.  Saying "28 %" and stopping there ("why is it stuck?") is
     #: worse than saying "evaluating, about 3 s left" and filling the bar over that estimate
     #: -- one is a mystery, the other is an explanation that happens to be a bar.
-    running_build_s: bpy.props.FloatProperty(default=0.0)
+    running_build_s: bpy.props.FloatProperty(default=0.0, options={"SKIP_SAVE"})
 
-    running_eval_s: bpy.props.FloatProperty(default=0.0)
+    running_eval_s: bpy.props.FloatProperty(default=0.0, options={"SKIP_SAVE"})
 
     #: Wall-clock start of the evaluation phase (``0`` while still building).
-    running_eval_start: bpy.props.FloatProperty(default=0.0)
+    running_eval_start: bpy.props.FloatProperty(default=0.0, options={"SKIP_SAVE"})
 
     #: The level the user asked for, when :attr:`last_level` is lower because the budget
     #: only allowed that much. Kept separately so the panel (and the object name) can be
     #: honest about what happened instead of silently shipping less than requested.
     last_requested_level: bpy.props.IntProperty(name="Requested Level", default=0)
 
-    #: ``""`` | ``DEGRADED`` | ``PREVIEW_ONLY`` | ``FORCED`` -- what the last Generate did.
-    notice_kind: bpy.props.StringProperty(default="")
+    #: ``""`` | ``DEGRADED`` | ``PREVIEW_ONLY`` | ``FORCED`` | ``REFUSED`` -- what the last
+    #: Generate did.  ``REFUSED`` means the click wrote nothing at all: the requested level
+    #: would exhaust the memory that is actually free, so even "generate it anyway" was not
+    #: offered.
+    notice_kind: bpy.props.StringProperty(default="", options={"SKIP_SAVE"})
 
-    notice_requested: bpy.props.IntProperty(default=0)
+    notice_requested: bpy.props.IntProperty(default=0, options={"SKIP_SAVE"})
 
-    notice_actual: bpy.props.IntProperty(default=0)
+    notice_actual: bpy.props.IntProperty(default=0, options={"SKIP_SAVE"})
 
-    error: bpy.props.StringProperty(name="Error", default="")
+    error: bpy.props.StringProperty(name="Error", default="", options={"SKIP_SAVE"})
+
+    #: ``""`` | ``"CURVE"`` | ``"KEYS"`` -- a Generate is waiting for the user to choose
+    #: between the requested level and the level that fits.  Set by :meth:`request_generate`
+    #: and cleared by either answer.  Not a user setting: it is the state of one click.
+    pending_generate: bpy.props.StringProperty(default="", options={"SKIP_SAVE"})
 
     def clear_notice(self) -> None:
         self.notice_kind = ""
         self.notice_requested = 0
         self.notice_actual = 0
+        # The refusal / preview-only notices keep their full sentence in ``error``.  Leaving
+        # it behind made a stale "Not enough memory" sit in Status next to the *next*
+        # question, which was no longer about that failure.
+        self.error = ""
 
     # --- 基因读写 ---------------------------------------------------------
 
@@ -512,6 +543,10 @@ class GenFractalFamilySettings(bpy.types.PropertyGroup):
         self.gene = self.current_gene()
         self.dirty = True
         _remember_gene(self)
+        # Any gene edit changes the point count, so an over-budget question is no longer
+        # about this gene.  These edits are not RNA ``update`` callbacks, which is why
+        # ``_mark_dirty`` cannot do it for us.
+        self.pending_generate = ""
 
     def apply_gene(self, gene: str) -> None:
         """按基因字符串写入（预设 / 导入 / 回读都走这里）。"""
@@ -738,6 +773,76 @@ class GenFractalFamilySettings(bpy.types.PropertyGroup):
         """Whether the requested output level is above the point budget (panel hint)."""
         return self.level_range()[1] > self.output_level_limit()
 
+    def output_verdict(self, keys: bool = False, level: int | None = None,
+                       low: int | None = None):
+        """What Generate may do with a level, as ``(state, reason, safe_level, info)``.
+
+        ``level`` defaults to the requested top level and ``low`` to the scene's range
+        start.  The operator passes both levels it is *actually about to write*, so the
+        memory check prices exactly the span :class:`build.BuildJob` will create.  Pricing
+        one level while writing a ladder is how a build slipped past the hard wall.
+        """
+        range_low, high = self.level_range()
+        first = range_low if low is None else int(low)
+        if keys:
+            top = min(high if level is None else level, SHAPE_KEY_MAX_LEVEL)
+            first = LEVEL_MIN
+            allowed = self.shape_key_level()
+            points = self.estimate_written(top, first)
+            needed_mb = points * budget.KEY_BYTES / 1048576.0
+            seconds = budget.estimate_seconds(points, "POLY", level_range=True)
+        else:
+            top = high if level is None else int(level)
+            first = min(first, top)
+            allowed = self.output_level_limit(first)
+            points = self.estimate_written(top, first)
+            needed_mb = budget.estimate_mb(points, self.spline_type)
+            seconds = budget.estimate_seconds(points, self.spline_type,
+                                              level_range=first < top)
+
+        available = sysinfo.available_bytes()
+        state, reason = budget.verdict(
+            needed_mb=needed_mb, seconds=seconds, fits=top <= allowed, available=available,
+        )
+        info = {
+            "level": top,
+            "low": first,
+            "allowed": allowed,
+            "needed_mb": needed_mb,
+            "available_mb": (available or 0) / 1048576.0,
+            "seconds": seconds,
+            "points": points,
+        }
+        if state == budget.FITS:
+            return state, reason, None, info
+        # Degrade to the level that fits the *budget*, not to the physical ceiling: the
+        # ceiling is the line past which the machine freezes, not a sensible target.  It is
+        # still returned as ``safe`` so a REFUSE notice can name the highest level that was
+        # physically possible.
+        safe = self._safe_level(keys, first, available)
+        info["safe_mb"] = budget.estimate_mb(
+            self.estimate_written(safe, first), self.spline_type) if not keys else 0.0
+        return state, reason, safe, info
+
+    def _safe_level(self, keys: bool, low: int, available) -> int:
+        """Highest level that stays inside the *physical* limit, not the policy budget."""
+        top = min(self.level_range()[1], SHAPE_KEY_MAX_LEVEL) if keys else self.level_range()[1]
+        for level in range(top, LEVEL_MIN - 1, -1):
+            if keys:
+                points = self.estimate_written(level, LEVEL_MIN)
+                needed_mb = points * budget.KEY_BYTES / 1048576.0
+                seconds = budget.estimate_seconds(points, "POLY", level_range=True)
+            else:
+                points = self.estimate_written(level, low)
+                needed_mb = budget.estimate_mb(points, self.spline_type)
+                seconds = budget.estimate_seconds(points, self.spline_type,
+                                                  level_range=low < level)
+            state, _reason = budget.verdict(needed_mb=needed_mb, seconds=seconds,
+                                            fits=False, available=available)
+            if state != budget.REFUSE:
+                return level
+        return LEVEL_MIN
+
     def preview_level(self):
         """Top level of the preview: reduced until it fits the preview budget.
 
@@ -841,6 +946,7 @@ class GenFractalFamilySettings(bpy.types.PropertyGroup):
         self.gene = self.current_gene()
         self.dirty = True
         _remember_gene(self)
+        self.pending_generate = ""
         from . import hud
 
         hud.tag_redraw()
@@ -939,12 +1045,45 @@ def forget_cached_gene(*_args):
     _LAST_GENE = None
 
 
+#: Defaults for the fields that describe one click, not the file.  ``SKIP_SAVE`` keeps them
+#: out of new saves; this table also repairs files written by older versions, where the
+#: values are still inside the .blend and would otherwise come back as a frozen progress
+#: bar (no modal left to clear it) or a question nobody is answering any more.
+_TRANSIENT_DEFAULTS = {
+    "running_fraction": -1.0,
+    "running_level": 0,
+    "running_high": 0,
+    "running_points": 0,
+    "running_build_s": 0.0,
+    "running_eval_s": 0.0,
+    "running_eval_start": 0.0,
+    "notice_kind": "",
+    "notice_requested": 0,
+    "notice_actual": 0,
+    "error": "",
+    "pending_generate": "",
+}
+
+
+@bpy.app.handlers.persistent
+def reset_transient_state(*_args):
+    """Drop click-scoped state after ``File > Open``."""
+    scene = getattr(bpy.context, "scene", None)
+    settings = getattr(scene, "fractalfamily", None) if scene is not None else None
+    if settings is None:
+        return
+    for name, default in _TRANSIENT_DEFAULTS.items():
+        if getattr(settings, name, default) != default:
+            setattr(settings, name, default)
+
+
 def install_undo_guard() -> None:
     """Attach the undo handlers (idempotent across a hot reload)."""
     for handlers, function in (
         (bpy.app.handlers.undo_pre, remember_gene_before_undo),
         (bpy.app.handlers.undo_post, restore_gene_after_undo),
         (bpy.app.handlers.load_post, forget_cached_gene),
+        (bpy.app.handlers.load_post, reset_transient_state),
     ):
         while function in handlers:
             handlers.remove(function)
@@ -954,7 +1093,8 @@ def install_undo_guard() -> None:
 def remove_undo_guard() -> None:
     for handlers, function in ((bpy.app.handlers.undo_pre, remember_gene_before_undo),
                                (bpy.app.handlers.undo_post, restore_gene_after_undo),
-                               (bpy.app.handlers.load_post, forget_cached_gene)):
+                               (bpy.app.handlers.load_post, forget_cached_gene),
+                               (bpy.app.handlers.load_post, reset_transient_state)):
         while function in handlers:
             handlers.remove(function)
 

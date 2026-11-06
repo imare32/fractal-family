@@ -12,6 +12,17 @@ What changed compared to **1.1.6**, the previous published release.
 
 ### Added
 
+- **A `?` at the right end of the Gene title** answers the one question a first-time user
+  has: why does a curve add-on talk about genes? Hovering it shows a single sentence — the
+  gene is a short list of integer segments, each one saying where the next copy of the
+  curve goes, and applying it over and over grows the fractal. That tooltip *is* the
+  feature: nothing is unfolded, nothing is stored on the scene, and a user who already knows
+  the idea sees a small `?` and nothing else. Clicking it repeats the sentence in the status
+  bar, so the button is not a dead end.
+- **The same `?` on the Initiator row**, for the other piece of jargon in the panel: it
+  says the initiator is the level-0 shape, and that a polygon initiator is what closes the
+  curve (Koch snowflake, Gosper island). Both buttons sit at the right end of their row and
+  share one helper, so a third explanation later is a one-line addition.
 - **HUD gene editor**: opens in the bottom-left corner, above Blender's own *Adjust Last
   Operation* panel — it steps up by that panel's height, and gives the clearance up only in
   a viewport too short to hold both. Drag the gene nodes on the lattice (always snapped to
@@ -77,7 +88,70 @@ What changed compared to **1.1.6**, the previous published release.
   build and removes the partially written curve. Faster builds run in one go — a progress
   bar for a 40 ms click would only flicker.
 
+### Fixed
+
+- **Click-scoped UI state is no longer saved into `.blend` files.** Saving during a build, or
+  with the over-budget question open, used to reopen with `running_fraction = 1.0`: the panel
+  drew the progress bar in place of the Generate buttons and no modal existed any more to
+  clear it, so generation was unreachable until a restart. Progress, pending-question,
+  notice and error fields now use `SKIP_SAVE`, and a `load_post` handler resets them in files
+  written by older versions too. The gene, Level and last-result figures still travel with
+  the file.
+- **The post-build `Level N anyway` button is gone.** It was a leftover from the old
+  silent-degradation flow and named a level it did not pass to the operator: changing Level
+  or Output Range between the notice and the click wrote a different build (measured: the
+  button said level 20, the click wrote level 8). Over budget is decided before anything is
+  written now, so the notice is informational only. Along the same line, `request_generate`
+  refuses to open a question while a build is running, every gene edit — including HUD
+  segment edits made through collection methods — drops a pending question, and
+  `clear_notice` clears the stale error text that otherwise sat in Status beside the next
+  question.
+
+- **An explicit level no longer writes a level ladder.** The over-budget choice buttons pass
+  a one-off `level`, and `_prepare()` treated that like a shape-key build, whose levels start
+  at 1. With **Output Range** off, `Generate level 20` / `Level 24 anyway` therefore wrote
+  `Fractal L1-24 ...` — every level in one object — although the user had asked for one
+  curve. Worse, the physical-memory wall priced only the top level while the job wrote the
+  whole ladder (roughly twice the points for a two-segment gene), so both the quoted figure
+  and the hard limit were wrong. A curve now takes its low end from **Output Range** (the
+  level itself when the switch is off); only shape keys start at level 1.
+  `output_verdict()` also accepts the low level the operator is about to write and prices
+  that exact span, so the check and the job cannot silently disagree again.
+
+- **The post-build "preparing the viewport" line no longer clips its point count.** In a
+  ~250 px sidebar Blender cuts the *middle* of a long `label`, so
+  `Points done · preparing the viewport: 16,777,217 points` rendered as
+  `Points done · pre...6,777,217 points` — the number that matters was the part eaten.
+  The count now has its own line, indented under the status text with a `BLANK1` icon.
+
+- **Output settings are frozen while an over-budget build waits for an answer.** The choice
+  row quotes memory and time for one configuration, yet **Output Range**, **Join Levels**,
+  **Range From / To** and **Spline** were still clickable. Switching Output Range on replaces
+  `level_range()` with `(level_from, level_to)` and roughly doubles the written points, so an
+  answer priced for a single level 24 could have written an unpriced ladder. Those controls
+  are now disabled until **Cancel**, with a *Settings locked · Cancel to edit* line saying
+  why. Edits made outside the Generate box (Level, presets, gene segments, initiator — the
+  HUD and scripts included) cannot be greyed out, so any of them drops the pending question
+  instead of leaving stale numbers on screen.
+
 ### Changed
+
+- **Generate asks before writing less.** The old flow silently wrote the highest level that
+  fit and left a `Wrote level 20, not 24` notice with a `Level 24 anyway` button; users
+  reasonably objected to having spent several GB on a curve they never agreed to. Now the
+  Generate buttons only *ask*: the panel offers the budget level and the requested level
+  (with the memory and time each costs) plus **Cancel**, and writes nothing until one is
+  chosen. The choice applies to that build alone — the scene's Level, HUD and preview do
+  not move — so a scripted `EXEC_DEFAULT` still behaves as before.
+- **"Anyway" now has a hard boundary.** The budget is a policy (25 % of free memory, ten
+  seconds) and can be overridden; a build that exceeds 85 % of the memory *actually free
+  right now*, or takes some ten minutes, cannot be. That level gets no insist button in
+  the choice row or in the post-build notice, because the allocation is an uninterruptible
+  C call: once the OS swaps, the progress bar and `ESC` cannot rescue the session. The
+  check lives in `budget.verdict()` and is re-applied in `_prepare()` on the level that is
+  about to be **written**, so it holds for curves, shape keys, and a scripted `force=True`
+  alike. A build that fits but takes minutes is still the user's call — a sliced build is
+  a visible, cancellable wait, not a hang.
 
 - **The panel moved from the `Edit` category to its own `Fractal` category.** Look for it
   under `3D Viewport > Sidebar (N) > Fractal`.

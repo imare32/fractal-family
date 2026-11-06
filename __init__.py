@@ -68,6 +68,20 @@ translation_dict = {
         ("*", "Paste Gene"): "粘贴基因",
         ("*", "Invalid gene: at least two segments and a non-zero total vector"):
             "基因无效：至少要两段、总向量不为零",
+
+        # --- 基因说明（标题右侧的 ? 的悬停提示） ----------------------------
+        ("*", "What Is a Gene?"): "什么是基因？",
+        ("*", "A gene is a short list of integer segments: each one says where the "
+              "next copy of the curve goes. Applied again and again, it grows into "
+              "the fractal."):
+            "基因就是一小串整数段：每一段说明曲线的下一份副本放在哪里。"
+            "把它反复套用，就长出分形。",
+        ("*", "What Is the Initiator?"): "什么是初始形状？",
+        ("*", "The initiator is the shape the gene is first applied to: level 0. A "
+              "straight line grows an open fractal, while a polygon closes it — that "
+              "is how a Koch snowflake or a Gosper island comes out in one click."):
+            "初始形状是基因第一次替换所作用的那个图形，也就是第 0 级。直线长出开放的分形，"
+            "多边形则把它闭合——Koch 雪花、闭合的 Gosper 岛就是这么一键生成的。",
         ("*", "Editing"): "编辑",
         ("*", "Preview"): "预览",
         ("*", "Colour Ramp"): "配色",
@@ -154,8 +168,9 @@ translation_dict = {
         ("*", "Generation cancelled"): "已取消生成",
         ("*", "Generating level {level} / {high} · {percent}%"):
             "正在生成：第 {level} / {high} 级 · {percent}%",
-        ("*", "Points done · preparing the viewport: {count:,} points"):
-            "点已写完 · 正在准备视口：{count:,} 点",
+        ("*", "Points done · preparing the viewport"):
+            "点已写完 · 正在准备视口",
+        ("*", "{count:,} points"): "{count:,} 点",
         ("*", "ESC cancels"): "按 ESC 可取消",
         ("*", "a gene needs at least two segments"): "基因至少要两段",
         ("*", "the gene has a zero-length segment (adjacent nodes coincide)"):
@@ -191,6 +206,9 @@ translation_dict = {
         ("Operator", "Switch Lattice Domain"): "切换点阵域",
         ("Operator", "HUD Gene Editor"): "HUD 编辑基因",
         ("Operator", "Dismiss"): "知道了",
+        ("Operator", "What Is a Gene?"): "什么是基因？",
+        ("Operator", "What Is the Initiator?"): "什么是初始形状？",
+        ("Operator", "Cancel"): "取消",
 
         # --- operator tooltips -------------------------------------------
         # Context-less, unlike the labels above: Blender's own catalogue keeps operator
@@ -201,6 +219,12 @@ translation_dict = {
               "says which one was used"):
             "生成当前基因的曲线。本机吃不下的等级会按能容纳的最高等级生成，面板会说明实际用了哪一级",
         ("*", "Hide this notice"): "隐藏这条提示",
+        ("*", "Check the requested level before writing anything. A level over this "
+              "machine's budget asks whether to write the level that fits or to "
+              "insist on the requested one"):
+            "写入前先检查等级：超出本机预算时询问是生成能容纳的等级，还是坚持原等级",
+        ("*", "Cancel this build without generating anything"):
+            "取消本次操作，不生成任何东西",
         ("*", "Frame the selected curve with an orthographic top-view camera, "
               "a 2048×2048 render and the Standard view transform"):
             "用正交俯视摄像机、2048×2048 分辨率与 Standard 色彩变换框住选中的曲线",
@@ -255,6 +279,33 @@ translation_dict = {
             "上次：第 {levels} 级 · {points:,} 点 · {ms:.0f} 毫秒",
         ("*", "{size} free · up to {limit:,} points"):
             "{size} 可用 · 上限 {limit:,} 点",
+
+        # --- 生成前的选择（超出预算时先问，不再静默降级） ----------------------
+        ("*", "Over budget"): "超出预算",
+        ("*", "Settings locked · Cancel to edit"): "设置已锁定 · 取消后可改",
+        ("*", "Cancel"): "取消",
+        ("*", "Would write level {limit}, not {level}"):
+            "将写入第 {limit} 级，而不是第 {level} 级",
+        ("*", "Generate level {level}"): "生成第 {level} 级",
+        ("*", "Level {level} · {size}"): "第 {level} 级 · {size}",
+        ("*", "About {seconds} · level {level} fits the budget"):
+            "约 {seconds} · 第 {level} 级在预算内",
+        ("*", "Not enough memory"): "内存不足",
+        ("*", "Level {level} needs {size}, {avail} free"):
+            "第 {level} 级需要 {size}，当前可用 {avail}",
+        ("*", "Generating it anyway is not offered"):
+            "该等级会卡死机器，因此不提供「仍然生成」",
+        ("*", "Build would take too long"): "生成耗时过长",
+        ("*", "About {minutes} min · generating anyway is not offered"):
+            "约需 {minutes} 分钟，不提供「仍然生成」",
+        ("*", "This level cannot be generated"): "该等级无法生成",
+        ("*", "Level {level} needs about {size}, but only {avail} is free. "
+              "Generating it would freeze this machine, so it was not written"):
+            "第 {level} 级约需 {size}，当前只有 {avail} 可用。"
+            "强制生成会让机器卡死，因此没有写入。",
+        ("*", "Level {level} would take about {minutes} minutes to build. "
+              "It was not written"):
+            "第 {level} 级预计需要约 {minutes} 分钟，因此没有写入。",
     }
 }
 
@@ -280,6 +331,10 @@ def _classes():
         ops.FRACTALFAMILY_OT_set_domain,
         ops.FRACTALFAMILY_OT_hud,
         ops.FRACTALFAMILY_OT_clear_notice,
+        ops.FRACTALFAMILY_OT_clear_request,
+        ops.FRACTALFAMILY_OT_gene_help,
+        ops.FRACTALFAMILY_OT_initiator_help,
+        ops.FRACTALFAMILY_OT_request_generate,
         ui.FRACTALFAMILY_PT_panel,
     )
 
